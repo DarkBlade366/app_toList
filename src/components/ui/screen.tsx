@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { PropsWithChildren, ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,21 +8,36 @@ import { Colors } from '@/constants/theme';
 
 const HeaderGradient = ['#14213A', '#0B0F17'] as const;
 
-export function Screen({ children, scroll }: PropsWithChildren<{ scroll?: boolean }>) {
-  const content = <View style={styles.content}>{children}</View>;
+export function Screen({
+  children,
+  scroll,
+  keyboard,
+}: PropsWithChildren<{ scroll?: boolean; keyboard?: boolean }>) {
+  let content = <View style={styles.content}>{children}</View>;
+  if (scroll) {
+    content = (
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
+        {content}
+      </ScrollView>
+    );
+  }
+  if (keyboard) {
+    content = (
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {content}
+      </KeyboardAvoidingView>
+    );
+  }
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <LinearGradient colors={HeaderGradient} style={StyleSheet.absoluteFill} />
-      {scroll ? (
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          {content}
-        </ScrollView>
-      ) : (
-        content
-      )}
+      {content}
     </SafeAreaView>
   );
 }
@@ -49,6 +64,7 @@ export function ScreenHeader({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
+  flex: { flex: 1 },
   scroll: { flex: 1 },
   scrollContent: { padding: 20, paddingBottom: 40 },
   content: { flex: 1, padding: 20, gap: 18 },

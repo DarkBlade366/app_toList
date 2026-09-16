@@ -83,6 +83,31 @@ export function formatTime(t: string | null | undefined): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+export function formatDateDMY(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/** Convierte texto DD/MM/AAAA (o DD-MM-AAAA, DD.MM.AAAA) a ISO yYYY-MM-DD; null si no es válida. */
+export function parseDateDMY(text: string): string | null {
+  const m = text.trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  return toISO(date);
+}
+
+export function isValidTime(t: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+}
+
 /** ¿Ocurre la tarea en la fecha dada? (recurrencia + rango de fechas) */
 export function occursOnDate(
   task: Pick<Task, 'startDate' | 'endDate' | 'recurrence' | 'recurrenceDays' | 'monthlyDay'>,

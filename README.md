@@ -13,7 +13,7 @@ Aplicación móvil para gestionar las tareas del día a día, objetivos generale
 
 - [x] Base: dependencias, config de la app, tema oscuro, tabs
 - [x] Base de datos (objetivos, tareas anidadas, recurrencias, recordatorios)
-- [ ] Formularios de alta/edición
+- [x] Formularios de alta/edición
 - [ ] Pantallas: Hoy, Tareas, Objetivos, detalle
 - [ ] Alarmas y notificaciones por tarea + resumen diario
 - [ ] Ajustes, pulido final y build APK
@@ -48,7 +48,7 @@ Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm ru
 - [src/app/](src/app/): Rutas de expo-router.
   - `src/app/_layout.tsx`: Layout raíz (provider SQLite, tema oscuro, Stack).
   - `src/app/(tabs)/`: Pestañas (Hoy, Tareas, Añadir, Objetivos, Ajustes).
-- [src/components/](src/components/): UI reutilizable (themed-text/view, `ui/card`, `ui/screen`).
+- [src/components/](src/components/): UI reutilizable (`toast`, formularios de tarea/objetivo, pickers, `ui/*`).
 - [src/constants/theme.ts](src/constants/theme.ts): Paleta oscura unificada, tipografías, espaciados.
 - [src/hooks/](src/hooks/): Hooks de tema y color scheme.
 - [src/lib/](src/lib/): Lógica de datos y persistencia.
@@ -83,6 +83,16 @@ Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm ru
 
 - TypeScript estricto (`tsconfig.json` extiende `expo/tsconfig.base`).
 - `npm run lint` para ESLint.
+
+- Los formularios admiten alta de **tareas** (con o sin sub-tarea padre, objetivo, prioridad, recurrencia, horario/margen y recordatorio) y de **objetivos** (título, descripción, color, fechas).
+- Secciones del formulario de tarea:
+  - **Sub-tarea de**: elige entre tareas principales existentes (anidamiento infinito).
+  - **Objetivo**: vincula la tarea a un objetivo.
+  - **Prioridad**: Baja / Media / Alta.
+  - **¿Se repite?**: Solo fechas (un día o un rango) o Recurrente (diaria / semanal con días de la semana / mensual con día del mes), con fecha de fin opcional.
+  - **Horario / margen**: hora de inicio y/o "termina antes de" (ej. antes de las 4pm).
+  - **Recordatorio**: Alarma / Notificación / Ninguna, avisar X minutos antes del fin y avisar al empezar.
+- Componentes UI: `ui/segmented`, `ui/field`, `ui/text-field`, `ui/date-field` (con atajos Hoy/Mañana/+7), `ui/time-field` (steppers ±15 min), `task-form`, `objective-form`, `reminder-fields`, `recurrence-fields`, `objective-picker`, `parent-picker`, `toast`.
 
 ## Base de datos y migraciones
 
