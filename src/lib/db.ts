@@ -1,19 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import {
-  Objective,
-  ObjectiveStatus,
-  Priority,
-  Recurrence,
-  RemindType,
-  Settings,
-  Task,
-  TaskCompletion,
-  TaskStatus,
-} from './schema';
+import { Priority, Recurrence, RemindType, Settings, Task, TaskCompletion, TaskStatus } from './schema';
 
 export type {
-  Objective,
   Priority,
   Recurrence,
   RemindType,
@@ -22,14 +11,11 @@ export type {
   TaskCompletion,
   TaskStatus,
 } from './schema';
-
-export type { ObjectiveStatus } from './schema';
 
 export interface TaskWrite {
   title: string;
   notes: string | null;
   parentId?: number | null;
-  objectiveId?: number | null;
   recurrence: Recurrence;
   recurrenceDays: number[] | null;
   monthlyDay: number | null;
@@ -45,7 +31,7 @@ export interface TaskWrite {
 }
 
 const TASK_SELECT = `
-  SELECT id, title, notes, parent_id AS parentId, objective_id AS objectiveId,
+  SELECT id, title, notes, parent_id AS parentId,
          recurrence, recurrence_days AS recurrenceDays, monthly_day AS monthlyDay,
          start_date AS startDate, end_date AS endDate, start_time AS startTime, end_time AS endTime,
          priority, status, remind_type AS remindType, remind_before_minutes AS remindBeforeMinutes,
@@ -112,89 +98,6 @@ export async function saveSettings(db: SQLiteDatabase, settings: Settings) {
 }
 
 // ---------------------------------------------------------------------------
-// Objectives
-// ---------------------------------------------------------------------------
-
-const OBJECTIVE_SELECT = `
-  SELECT id, title, description, color,
-         start_date AS startDate, due_date AS dueDate, status,
-         completed_at AS completedAt, created_at AS createdAt
-  FROM objectives`;
-
-export async function getObjectives(db: SQLiteDatabase): Promise<Objective[]> {
-  return db.getAllAsync<Objective>(
-    `${OBJECTIVE_SELECT} ORDER BY status = 'completed', COALESCE(due_date, '9999') ASC, id DESC`
-  );
-}
-
-export async function addObjective(
-  db: SQLiteDatabase,
-  data: {
-    title: string;
-    description?: string | null;
-    color: string;
-    startDate?: string | null;
-    dueDate?: string | null;
-  }
-): Promise<number> {
-  const result = await db.runAsync(
-    `INSERT INTO objectives (title, description, color, start_date, due_date, status, created_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?)`,
-    [
-      data.title,
-      data.description ?? null,
-      data.color,
-      data.startDate ?? null,
-      data.dueDate ?? null,
-      new Date().toISOString(),
-    ]
-  );
-  return result.lastInsertRowId;
-}
-
-export async function updateObjective(
-  db: SQLiteDatabase,
-  id: number,
-  fields: {
-    title: string;
-    description: string | null;
-    color: string;
-    startDate: string | null;
-    dueDate: string | null;
-  }
-) {
-  await db.runAsync(
-    `UPDATE objectives SET title = ?, description = ?, color = ?, start_date = ?, due_date = ? WHERE id = ?`,
-    [fields.title, fields.description, fields.color, fields.startDate, fields.dueDate, id]
-  );
-}
-
-export async function setObjectiveStatus(db: SQLiteDatabase, id: number, status: ObjectiveStatus) {
-  await db.runAsync(
-    `UPDATE objectives SET status = ?, completed_at = CASE WHEN ? = 'completed' THEN ? ELSE NULL END WHERE id = ?`,
-    [status, status, new Date().toISOString(), id]
-  );
-}
-
-export async function deleteObjective(db: SQLiteDatabase, id: number) {
-  await db.runAsync('DELETE FROM objectives WHERE id = ?', id);
-}
-
-export async function objectiveProgress(
-  db: SQLiteDatabase,
-  objectiveId: number
-): Promise<{ done: number; total: number }> {
-  const row = await db.getFirstAsync<{ total: number; done: number }>(
-    `SELECT COUNT(*) AS total,
-            COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS done
-     FROM tasks
-     WHERE objective_id = ? AND status != 'cancelled'`,
-    objectiveId
-  );
-  return { done: row?.done ?? 0, total: row?.total ?? 0 };
-}
-
-// ---------------------------------------------------------------------------
 // Tasks
 // ---------------------------------------------------------------------------
 
@@ -212,11 +115,6 @@ export async function getTask(db: SQLiteDatabase, id: number): Promise<Task | nu
   return row ? mapTask(row) : null;
 }
 
-export async function getTasksByObjective(db: SQLiteDatabase, objectiveId: number): Promise<Task[]> {
-  const rows = await db.getAllAsync<RawTask>(`${TASK_SELECT} WHERE objective_id = ?`, objectiveId);
-  return rows.map(mapTask);
-}
-
 export async function hasSubtasks(db: SQLiteDatabase, parentId: number): Promise<boolean> {
   const row = await db.getFirstAsync<{ n: number }>(
     'SELECT COUNT(*) AS n FROM tasks WHERE parent_id = ?',
@@ -228,15 +126,14 @@ export async function hasSubtasks(db: SQLiteDatabase, parentId: number): Promise
 export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<number> {
   const now = new Date().toISOString();
   const result = await db.runAsync(
-    `INSERT INTO tasks (title, notes, parent_id, objective_id, recurrence, recurrence_days,
+    `INSERT INTO tasks (title, notes, parent_id, recurrence, recurrence_days,
                         monthly_day, start_date, end_date, start_time, end_time, priority, status,
                         remind_type, remind_before_minutes, remind_at_start, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.title,
       data.notes,
       data.parentId ?? null,
-      data.objectiveId ?? null,
       data.recurrence,
       data.recurrenceDays ? JSON.stringify(data.recurrenceDays) : null,
       data.monthlyDay,
@@ -258,7 +155,7 @@ export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<numb
 
 export async function updateTask(db: SQLiteDatabase, id: number, data: TaskWrite) {
   await db.runAsync(
-    `UPDATE tasks SET title = ?, notes = ?, objective_id = ?, recurrence = ?, recurrence_days = ?,
+    `UPDATE tasks SET title = ?, notes = ?, recurrence = ?, recurrence_days = ?,
                       monthly_day = ?, start_date = ?, end_date = ?, start_time = ?, end_time = ?,
                       priority = ?, status = ?, remind_type = ?, remind_before_minutes = ?,
                       remind_at_start = ?, updated_at = ?
@@ -266,7 +163,6 @@ export async function updateTask(db: SQLiteDatabase, id: number, data: TaskWrite
     [
       data.title,
       data.notes,
-      data.objectiveId ?? null,
       data.recurrence,
       data.recurrenceDays ? JSON.stringify(data.recurrenceDays) : null,
       data.monthlyDay,

@@ -1,6 +1,6 @@
 # Metas Claras
 
-Aplicación móvil para gestionar las tareas del día a día, objetivos generales y sub-tareas, con alarmas y recordatorios. Permite organizar tareas puntuales o recurrentes (diarias, semanales, mensuales), con márgenes de tiempo ("antes de las 4 pm", "de tal fecha a tal fecha"), prioridad y estados (pendiente, en progreso, completada, cancelada, en pausa/espera).
+Aplicación móvil para gestionar las tareas del día a día, con tareas anidadas, alarmas y recordatorios. Permite organizar tareas puntuales o recurrentes (diarias, semanales, mensuales), con márgenes de tiempo ("antes de las 4 pm", "de tal día a tal día"), prioridad y estados (pendiente, en progreso, completada, cancelada, en pausa/espera).
 
 ## Visión rápida
 
@@ -12,9 +12,9 @@ Aplicación móvil para gestionar las tareas del día a día, objetivos generale
 ## Estado del proyecto
 
 - [x] Base: dependencias, config de la app, tema oscuro, tabs
-- [x] Base de datos (objetivos, tareas anidadas, recurrencias, recordatorios)
-- [x] Formularios de alta/edición
-- [ ] Pantallas: Hoy, Tareas, Objetivos, detalle
+- [x] Base de datos (tareas anidadas, recurrencias, recordatorios)
+- [x] Formularios de alta/edición (asistente por tipo de tarea)
+- [ ] Pantallas: Hoy, Tareas, detalle
 - [ ] Alarmas y notificaciones por tarea + resumen diario
 - [ ] Ajustes, pulido final y build APK
 
@@ -46,29 +46,43 @@ Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm ru
 ## Estructura del proyecto
 
 - [src/app/](src/app/): Rutas de expo-router.
-  - `src/app/_layout.tsx`: Layout raíz (provider SQLite, tema oscuro, Stack).
-  - `src/app/(tabs)/`: Pestañas (Hoy, Tareas, Añadir, Objetivos, Ajustes).
-- [src/components/](src/components/): UI reutilizable (`toast`, formularios de tarea/objetivo, pickers, `ui/*`).
+  - `src/app/_layout.tsx`: Layout raíz (provider SQLite, tema oscuro, Stack + modales de tarea).
+  - `src/app/(tabs)/`: Pestañas (Hoy, Tareas, Añadir, Ajustes).
+- [src/components/](src/components/): UI reutilizable (`toast`, `task-form`, `task-row`, `ui/*`).
 - [src/constants/theme.ts](src/constants/theme.ts): Paleta oscura unificada, tipografías, espaciados.
 - [src/hooks/](src/hooks/): Hooks de tema y color scheme.
 - [src/lib/](src/lib/): Lógica de datos y persistencia.
   - `src/lib/schema.ts`: Definición del esquema, tipos y migraciones (`PRAGMA user_version`).
-  - `src/lib/db.ts`: API de alto nivel para objetivos, tareas, completados y ajustes.
+  - `src/lib/db.ts`: API de alto nivel para tareas, completados y ajustes.
   - `src/lib/logic.ts`: Utilidades de fecha, recurrencias y estados efectivos por día.
   - `src/lib/db-provider.tsx`: Proveedor SQLite.
 - [assets/images/](assets/images/): Ícono, splash, favicon, adaptive icons.
 - [scripts/reset-project.js](scripts/reset-project.js): Script auxiliar de la plantilla (no usar).
 
+## Creación de tareas (asistente por pasos)
+
+Al crear una tarea lo primero que eliges es el **tipo**, y a partir de ahí aparecen únicamente las opciones pertinentes:
+
+1. **Tipo de tarea**: Tarea general (sin fecha obligatoria) · Un día · De tal día a tal día · Diaria · Semanal · Mensual.
+2. **Cuándo**: solo los campos del tipo elegido (día concreto, rango desde/hasta, días de la semana, día del mes) y margen de tiempo opcional ("de HH:MM a HH:MM").
+3. **Detalles**: título, notas, prioridad y recordatorio.
+
+## Tareas dentro de otra tarea
+
+- No hay "objetivos" ni "sub-tareas": las tareas se anidan añadiendo **una nueva tarea dentro de una tarea existente** desde su pantalla de detalle (botón **Agregar tarea**), que abre el mismo asistente con la tarea padre ya fijada.
+- Una **tarea general siempre es una tarea raíz**: nunca puede crearse dentro de otra (el tipo no se ofrece cuando hay padre).
+- Validaciones: las tareas hijas no pueden terminar después que la tarea padre (`fin hija ≤ fin padre`) ni empezar antes (`inicio hija ≥ inicio padre`); en toda tarea el fin no puede ser anterior al inicio.
+
 ## Funcionalidades (hoja de ruta)
 
-- Tareas con **sub-tareas anidadas** (cada una editable y eliminable).
-- Recurrencia: puntual / diaria / semanal (días elegidos) / mensual.
-- Márgenes de tiempo: fecha única, rango de fechas, "antes de las HH:MM".
+- Tareas con **hijos anidados** (cada una editable y eliminable).
+- Recurrencia: un día / rango de fechas / diaria / semanal (días elegidos) / mensual (día del mes).
+- **Acceso rápido en la pestaña principal**: botones para crear al momento una tarea **"para hoy"** o **"para mañana"** (tarea de un día con la fecha ya puesta).
+- Margen de tiempo: "de HH:MM a HH:MM" (ej. antes de las 4pm).
 - Estados: pendiente, en progreso, completada, cancelada, en pausa/espera.
 - **Recordatorios por tarea**: Alarma (sonido) o Notificación (silenciosa).
   - Aviso de inicio, aviso previo al fin ("termina en X min") y aviso al vencer.
 - Resumen diario programado con los pendientes del día.
-- Objetivos con barra de progreso (sub-tareas completadas / total).
 
 ## Dependencias destacadas
 
@@ -84,21 +98,14 @@ Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm ru
 - TypeScript estricto (`tsconfig.json` extiende `expo/tsconfig.base`).
 - `npm run lint` para ESLint.
 
-- Los formularios admiten alta de **tareas** (con o sin sub-tarea padre, objetivo, prioridad, recurrencia, horario/margen y recordatorio) y de **objetivos** (título, descripción, color, fechas).
-- Secciones del formulario de tarea:
-  - **Sub-tarea de**: elige entre tareas principales existentes (anidamiento infinito).
-  - **Objetivo**: vincula la tarea a un objetivo.
-  - **Prioridad**: Baja / Media / Alta.
-  - **¿Se repite?**: Solo fechas (un día o un rango) o Recurrente (diaria / semanal con días de la semana / mensual con día del mes), con fecha de fin opcional.
-  - **Horario / margen**: hora de inicio y/o "termina antes de" (ej. antes de las 4pm).
-  - **Recordatorio**: Alarma / Notificación / Ninguna, avisar X minutos antes del fin y avisar al empezar.
-- Componentes UI: `ui/segmented`, `ui/field`, `ui/text-field`, `ui/date-field` (con atajos Hoy/Mañana/+7), `ui/time-field` (steppers ±15 min), `task-form`, `objective-form`, `reminder-fields`, `recurrence-fields`, `objective-picker`, `parent-picker`, `toast`.
+- Los formularios admiten alta/edición de **tareas** mediante un asistente en pasos (ver "Creación de tareas").
+- Componentes UI: `ui/segmented`, `ui/field`, `ui/text-field`, `ui/date-field` (con atajos Hoy/Mañana/+7), `ui/time-field` (steppers ±15 min), `task-form`, `task-row`, `toast`.
 
 ## Base de datos y migraciones
 
 - La app usa `expo-sqlite` con archivo local `metas.db` (WAL, claves foráneas activas).
 - Las migraciones son incrementales por `PRAGMA user_version` (ver [src/lib/schema.ts](src/lib/schema.ts)).
-- Tablas: `objectives`, `tasks` (con `parent_id` para sub-tareas en cascada y `objective_id`), `task_completions` (historial por fecha, único por tarea+día) y `settings`.
+- Tablas: `tasks` (con `parent_id` para tareas anidadas en cascada), `task_completions` (historial por fecha, único por tarea+día) y `settings`.
 - Campos clave de `tasks`: `recurrence` (none/daily/weekly/monthly), `recurrence_days` (semanal), `monthly_day`, `start_date`/`end_date`, `start_time`/`end_time` (margen horario), `priority`, `status`, `remind_type`, `remind_before_minutes`, `remind_at_start`.
 - Las tareas recurrentes se "reinician" solas: si completaste la de ayer y hoy no tienes completado, aparece como pendiente de nuevo.
 

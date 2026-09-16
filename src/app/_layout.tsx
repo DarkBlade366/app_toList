@@ -13,6 +13,8 @@ export default function RootLayout() {
           value={{ ...DarkTheme, colors: { ...DarkTheme.colors, background: Colors.background } }}>
           <Stack screenOptions={{ contentStyle: { backgroundColor: Colors.background } }}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="task/new" options={{ presentation: 'modal', headerShown: false }} />
+            <Stack.Screen name="task/[id]" options={{ presentation: 'modal', headerShown: false }} />
           </Stack>
           <StatusBar style="light" />
         </ThemeProvider>

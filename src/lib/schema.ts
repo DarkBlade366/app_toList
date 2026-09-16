@@ -6,26 +6,12 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' |
 export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
 export type RemindType = 'alarm' | 'notification' | 'none';
 export type Priority = 'low' | 'medium' | 'high';
-export type ObjectiveStatus = 'active' | 'completed' | 'cancelled';
-
-export interface Objective {
-  id: number;
-  title: string;
-  description: string | null;
-  color: string;
-  startDate: string | null;
-  dueDate: string | null;
-  status: ObjectiveStatus;
-  completedAt: string | null;
-  createdAt: string;
-}
 
 export interface Task {
   id: number;
   title: string;
   notes: string | null;
   parentId: number | null;
-  objectiveId: number | null;
   recurrence: Recurrence;
   recurrenceDays: number[] | null;
   monthlyDay: number | null;
@@ -67,7 +53,7 @@ const SETTING_DEFAULTS: Record<keyof Settings, string> = {
 };
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 1;
+  const DATABASE_VERSION = 2;
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = versionRow?.user_version ?? 0;
 
@@ -80,24 +66,11 @@ export async function migrateDbIfNeeded(db: SQLiteDatabase) {
 PRAGMA journal_mode = 'wal';
 PRAGMA foreign_keys = ON;
 
-CREATE TABLE IF NOT EXISTS objectives (
-  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT,
-  color TEXT NOT NULL DEFAULT '#22D3EE',
-  start_date TEXT,
-  due_date TEXT,
-  status TEXT NOT NULL DEFAULT 'active',
-  completed_at TEXT,
-  created_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   title TEXT NOT NULL,
   notes TEXT,
   parent_id INTEGER,
-  objective_id INTEGER,
   recurrence TEXT NOT NULL DEFAULT 'none',
   recurrence_days TEXT,
   monthly_day INTEGER,
@@ -113,12 +86,10 @@ CREATE TABLE IF NOT EXISTS tasks (
   completed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
-  FOREIGN KEY (parent_id) REFERENCES tasks (id) ON DELETE CASCADE,
-  FOREIGN KEY (objective_id) REFERENCES objectives (id) ON DELETE SET NULL
+  FOREIGN KEY (parent_id) REFERENCES tasks (id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks (parent_id);
-CREATE INDEX IF NOT EXISTS idx_tasks_objective ON tasks (objective_id);
 
 CREATE TABLE IF NOT EXISTS task_completions (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -147,7 +118,49 @@ INSERT OR IGNORE INTO settings (key, value) VALUES ${Object.entries(SETTING_DEFA
     if (initialized?.value !== '1') {
       await db.runAsync("INSERT OR IGNORE INTO settings (key, value) VALUES ('initialized', '1')");
     }
-    currentDbVersion = 1;
+    currentDbVersion = 2;
+  } else if (currentDbVersion === 1) {
+    await db.execAsync(`
+PRAGMA foreign_keys = OFF;
+BEGIN;
+CREATE TABLE tasks_v2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  title TEXT NOT NULL,
+  notes TEXT,
+  parent_id INTEGER,
+  recurrence TEXT NOT NULL DEFAULT 'none',
+  recurrence_days TEXT,
+  monthly_day INTEGER,
+  start_date TEXT,
+  end_date TEXT,
+  start_time TEXT,
+  end_time TEXT,
+  priority TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'pending',
+  remind_type TEXT NOT NULL DEFAULT 'alarm',
+  remind_before_minutes INTEGER,
+  remind_at_start INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (parent_id) REFERENCES tasks (id) ON DELETE CASCADE
+);
+INSERT INTO tasks_v2 (id, title, notes, parent_id, recurrence, recurrence_days, monthly_day,
+                      start_date, end_date, start_time, end_time, priority, status,
+                      remind_type, remind_before_minutes, remind_at_start, completed_at,
+                      created_at, updated_at)
+  SELECT id, title, notes, parent_id, recurrence, recurrence_days, monthly_day,
+         start_date, end_date, start_time, end_time, priority, status,
+         remind_type, remind_before_minutes, remind_at_start, completed_at,
+         created_at, updated_at
+  FROM tasks;
+DROP TABLE tasks;
+ALTER TABLE tasks_v2 RENAME TO tasks;
+DROP TABLE IF EXISTS objectives;
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks (parent_id);
+COMMIT;
+`);
+    currentDbVersion = 2;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

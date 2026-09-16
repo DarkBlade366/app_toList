@@ -70,13 +70,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="objectives"
-        options={{
-          title: 'Objetivos',
-          tabBarIcon: tabIcon('flag', 'flag-outline'),
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         options={{
           title: 'Ajustes',
