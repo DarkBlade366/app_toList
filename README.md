@@ -1,56 +1,108 @@
-# Welcome to your Expo app 👋
+# Metas Claras
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicación móvil para gestionar las tareas del día a día, objetivos generales y sub-tareas, con alarmas y recordatorios. Permite organizar tareas puntuales o recurrentes (diarias, semanales, mensuales), con márgenes de tiempo ("antes de las 4 pm", "de tal fecha a tal fecha"), prioridad y estados (pendiente, en progreso, completada, cancelada, en pausa/espera).
 
-## Get started
+## Visión rápida
 
-1. Install dependencies
+- **Nombre:** Metas Claras
+- **Stack:** Expo (SDK 57), React Native (0.86), TypeScript, expo-router
+- **Base de datos local:** SQLite (expo-sqlite) — archivo: `metas.db`
+- **Recordatorios:** expo-notifications (alarmas con sonido del sistema / notificaciones silenciosas)
 
-   ```bash
-   npm install
-   ```
+## Estado del proyecto
 
-2. Start the app
+- [x] Base: dependencias, config de la app, tema oscuro, tabs
+- [ ] Base de datos (objetivos, tareas anidadas, recurrencias, recordatorios)
+- [ ] Formularios de alta/edición
+- [ ] Pantallas: Hoy, Tareas, Objetivos, detalle
+- [ ] Alarmas y notificaciones por tarea + resumen diario
+- [ ] Ajustes, pulido final y build APK
 
-   ```bash
-   npx expo start
-   ```
+## Requisitos
 
-In the output, you'll find options to open the app in a
+- Node.js (v18+)
+- npm
+- Aplicación **Expo Go** instalada en el celular (Play Store / App Store)
+- NO hace falta Android Studio ni Xcode para probar la app en el celular
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Instalación y ejecución
 
 ```bash
-npm run reset-project
+npm install
+npm start
+# si el celular no está en la misma red Wi-Fi:
+npx expo start --tunnel
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm run web`.
 
-### Other setup steps
+## Scripts útiles
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- `start`: `expo start`
+- `lint`: `expo lint` (ESLint con `eslint-config-expo`)
+- `android` / `ios` / `web`: emulador/simulador (opcional)
+- ⚠️ `reset-project` borraría las pantallas y formularios propios. No lo uses.
 
-## Learn more
+## Estructura del proyecto
 
-To learn more about developing your project with Expo, look at the following resources:
+- [src/app/](src/app/): Rutas de expo-router.
+  - `src/app/_layout.tsx`: Layout raíz (tema oscuro, Stack).
+  - `src/app/(tabs)/`: Pestañas (Hoy, Tareas, Añadir, Objetivos, Ajustes).
+- [src/components/](src/components/): UI reutilizable (themed-text/view, `ui/card`, `ui/screen`).
+- [src/constants/theme.ts](src/constants/theme.ts): Paleta oscura unificada, tipografías, espaciados.
+- [src/hooks/](src/hooks/): Hooks de tema y color scheme.
+- [assets/images/](assets/images/): Ícono, splash, favicon, adaptive icons.
+- [scripts/reset-project.js](scripts/reset-project.js): Script auxiliar de la plantilla (no usar).
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Funcionalidades (hoja de ruta)
 
-## Join the community
+- Tareas con **sub-tareas anidadas** (cada una editable y eliminable).
+- Recurrencia: puntual / diaria / semanal (días elegidos) / mensual.
+- Márgenes de tiempo: fecha única, rango de fechas, "antes de las HH:MM".
+- Estados: pendiente, en progreso, completada, cancelada, en pausa/espera.
+- **Recordatorios por tarea**: Alarma (sonido) o Notificación (silenciosa).
+  - Aviso de inicio, aviso previo al fin ("termina en X min") y aviso al vencer.
+- Resumen diario programado con los pendientes del día.
+- Objetivos con barra de progreso (sub-tareas completadas / total).
 
-Join our community of developers creating universal apps.
+## Dependencias destacadas
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `expo` (~57), `expo-router` (~57)
+- `expo-sqlite` — persistencia local
+- `expo-notifications` — alarmas y recordatorios (locales; sin push remoto)
+- `@expo/vector-icons` — íconos
+- `expo-haptics` — respuesta háptica
+- `react` 19.2, `react-native` 0.86
+
+## Linting y Tipado
+
+- TypeScript estricto (`tsconfig.json` extiende `expo/tsconfig.base`).
+- `npm run lint` para ESLint.
+
+## Base de datos y migraciones
+
+- La app usa `expo-sqlite` con archivo local `metas.db`.
+- Las migraciones son incrementales por `PRAGMA user_version` (ver `src/lib/schema.ts` cuando se implemente).
+- Estructura principal prevista: `objectives`, `tasks` (con `parent_id` para sub-tareas), `task_completions`, `settings`.
+
+## Instalar la app en el celular (APK)
+
+Compilar como `.apk` instalable con **EAS cloud build** de Expo:
+
+```bash
+npx eas-cli login
+npx eas build --platform android --profile preview
+```
+
+Se genera un enlace de descarga del `.apk` para instalar en el celular (sin depender de Expo Go).
+
+## Notas de mantenimiento
+
+- `app.json` contiene el esquema (`scheme: metasclaras`) y plugins: expo-router, expo-sqlite, expo-notifications, expo-splash-screen.
+- Los permisos en `app.json` incluyen `SCHEDULE_EXACT_ALARM` (Android 12+) para que las alarmas disparen a tiempo.
+- Las notificaciones locales funcionan en **Expo Go** en Android/iOS; el sonido custom exigiría un build de desarrollo.
+
+## Contribuir
+
+- Abrir issues para bugs o mejoras.
+- Hacer PRs con descripciones claras y, si afectan la base de datos, explicar las migraciones.
