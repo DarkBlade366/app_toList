@@ -1,0 +1,154 @@
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+export const DATABASE_NAME = 'metas.db';
+
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'paused';
+export type Recurrence = 'none' | 'daily' | 'weekly' | 'monthly';
+export type RemindType = 'alarm' | 'notification' | 'none';
+export type Priority = 'low' | 'medium' | 'high';
+export type ObjectiveStatus = 'active' | 'completed' | 'cancelled';
+
+export interface Objective {
+  id: number;
+  title: string;
+  description: string | null;
+  color: string;
+  startDate: string | null;
+  dueDate: string | null;
+  status: ObjectiveStatus;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface Task {
+  id: number;
+  title: string;
+  notes: string | null;
+  parentId: number | null;
+  objectiveId: number | null;
+  recurrence: Recurrence;
+  recurrenceDays: number[] | null;
+  monthlyDay: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  priority: Priority;
+  status: TaskStatus;
+  remindType: RemindType;
+  remindBeforeMinutes: number | null;
+  remindAtStart: boolean;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Settings {
+  remindersEnabled: boolean;
+  defaultRemindType: RemindType;
+  defaultRemindBeforeMinutes: number;
+  remindAtStartDefault: boolean;
+  dailySummaryEnabled: boolean;
+  dailySummaryTime: string;
+}
+
+export interface TaskCompletion {
+  taskId: number;
+  date: string;
+}
+
+const SETTING_DEFAULTS: Record<keyof Settings, string> = {
+  remindersEnabled: '1',
+  defaultRemindType: 'alarm',
+  defaultRemindBeforeMinutes: '15',
+  remindAtStartDefault: '0',
+  dailySummaryEnabled: '1',
+  dailySummaryTime: '07:00',
+};
+
+export async function migrateDbIfNeeded(db: SQLiteDatabase) {
+  const DATABASE_VERSION = 1;
+  const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  let currentDbVersion = versionRow?.user_version ?? 0;
+
+  if (currentDbVersion >= DATABASE_VERSION) {
+    return;
+  }
+
+  if (currentDbVersion === 0) {
+    await db.execAsync(`
+PRAGMA journal_mode = 'wal';
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS objectives (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  color TEXT NOT NULL DEFAULT '#22D3EE',
+  start_date TEXT,
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  completed_at TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  title TEXT NOT NULL,
+  notes TEXT,
+  parent_id INTEGER,
+  objective_id INTEGER,
+  recurrence TEXT NOT NULL DEFAULT 'none',
+  recurrence_days TEXT,
+  monthly_day INTEGER,
+  start_date TEXT,
+  end_date TEXT,
+  start_time TEXT,
+  end_time TEXT,
+  priority TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'pending',
+  remind_type TEXT NOT NULL DEFAULT 'alarm',
+  remind_before_minutes INTEGER,
+  remind_at_start INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (parent_id) REFERENCES tasks (id) ON DELETE CASCADE,
+  FOREIGN KEY (objective_id) REFERENCES objectives (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks (parent_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_objective ON tasks (objective_id);
+
+CREATE TABLE IF NOT EXISTS task_completions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  task_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE (task_id, date),
+  FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_completions_date ON task_completions (date);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+
+INSERT OR IGNORE INTO settings (key, value) VALUES ${Object.entries(SETTING_DEFAULTS)
+      .map(([k, v]) => `('${k}', '${v}')`)
+      .join(', ')};
+`);
+
+    const initialized = await db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM settings WHERE key = 'initialized'"
+    );
+    if (initialized?.value !== '1') {
+      await db.runAsync("INSERT OR IGNORE INTO settings (key, value) VALUES ('initialized', '1')");
+    }
+    currentDbVersion = 1;
+  }
+
+  await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
+}

@@ -12,7 +12,7 @@ Aplicación móvil para gestionar las tareas del día a día, objetivos generale
 ## Estado del proyecto
 
 - [x] Base: dependencias, config de la app, tema oscuro, tabs
-- [ ] Base de datos (objetivos, tareas anidadas, recurrencias, recordatorios)
+- [x] Base de datos (objetivos, tareas anidadas, recurrencias, recordatorios)
 - [ ] Formularios de alta/edición
 - [ ] Pantallas: Hoy, Tareas, Objetivos, detalle
 - [ ] Alarmas y notificaciones por tarea + resumen diario
@@ -46,11 +46,16 @@ Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm ru
 ## Estructura del proyecto
 
 - [src/app/](src/app/): Rutas de expo-router.
-  - `src/app/_layout.tsx`: Layout raíz (tema oscuro, Stack).
+  - `src/app/_layout.tsx`: Layout raíz (provider SQLite, tema oscuro, Stack).
   - `src/app/(tabs)/`: Pestañas (Hoy, Tareas, Añadir, Objetivos, Ajustes).
 - [src/components/](src/components/): UI reutilizable (themed-text/view, `ui/card`, `ui/screen`).
 - [src/constants/theme.ts](src/constants/theme.ts): Paleta oscura unificada, tipografías, espaciados.
 - [src/hooks/](src/hooks/): Hooks de tema y color scheme.
+- [src/lib/](src/lib/): Lógica de datos y persistencia.
+  - `src/lib/schema.ts`: Definición del esquema, tipos y migraciones (`PRAGMA user_version`).
+  - `src/lib/db.ts`: API de alto nivel para objetivos, tareas, completados y ajustes.
+  - `src/lib/logic.ts`: Utilidades de fecha, recurrencias y estados efectivos por día.
+  - `src/lib/db-provider.tsx`: Proveedor SQLite.
 - [assets/images/](assets/images/): Ícono, splash, favicon, adaptive icons.
 - [scripts/reset-project.js](scripts/reset-project.js): Script auxiliar de la plantilla (no usar).
 
@@ -81,9 +86,11 @@ Escanea el QR con **Expo Go**. Extra: `npm run android`, `npm run ios` o `npm ru
 
 ## Base de datos y migraciones
 
-- La app usa `expo-sqlite` con archivo local `metas.db`.
-- Las migraciones son incrementales por `PRAGMA user_version` (ver `src/lib/schema.ts` cuando se implemente).
-- Estructura principal prevista: `objectives`, `tasks` (con `parent_id` para sub-tareas), `task_completions`, `settings`.
+- La app usa `expo-sqlite` con archivo local `metas.db` (WAL, claves foráneas activas).
+- Las migraciones son incrementales por `PRAGMA user_version` (ver [src/lib/schema.ts](src/lib/schema.ts)).
+- Tablas: `objectives`, `tasks` (con `parent_id` para sub-tareas en cascada y `objective_id`), `task_completions` (historial por fecha, único por tarea+día) y `settings`.
+- Campos clave de `tasks`: `recurrence` (none/daily/weekly/monthly), `recurrence_days` (semanal), `monthly_day`, `start_date`/`end_date`, `start_time`/`end_time` (margen horario), `priority`, `status`, `remind_type`, `remind_before_minutes`, `remind_at_start`.
+- Las tareas recurrentes se "reinician" solas: si completaste la de ayer y hoy no tienes completado, aparece como pendiente de nuevo.
 
 ## Instalar la app en el celular (APK)
 
