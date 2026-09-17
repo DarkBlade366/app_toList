@@ -50,7 +50,7 @@ export default function TasksScreen() {
   );
 
   return (
-    <Screen>
+    <Screen scroll>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <ThemedText style={styles.title}>Tareas</ThemedText>

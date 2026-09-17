@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ReactElement, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskRow } from '@/components/task-row';
@@ -120,7 +120,10 @@ export default function TaskTypeScreen() {
         <View style={{ width: 34 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}>
         <Segmented options={FILTERS} value={filter} onChange={setFilter} />
 
         {visible.length === 0 ? (
@@ -147,7 +150,7 @@ export default function TaskTypeScreen() {
             </Pressable>
           </>
         )}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -163,7 +166,7 @@ const styles = StyleSheet.create({
   },
   back: { width: 34 },
   title: { fontSize: 20, fontWeight: '800', color: Colors.text },
-  content: { paddingHorizontal: 16, gap: 14, flex: 1 },
+  content: { paddingHorizontal: 16, gap: 14, paddingBottom: 32 },
   empty: { alignItems: 'center', gap: 10, paddingVertical: 32 },
   emptyText: { color: Colors.muted, textAlign: 'center' },
   addBtn: {

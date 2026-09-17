@@ -134,7 +134,7 @@ export default function TodayScreen() {
   }
 
   return (
-    <Screen>
+    <Screen scroll>
       <View style={styles.header}>
         <Pressable style={styles.navBtn} hitSlop={10} onPress={() => setDate(addDays(date, -1))}>
           <Ionicons name="chevron-back" size={22} color={Colors.tint} />
