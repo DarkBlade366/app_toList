@@ -190,6 +190,31 @@ export function tasksForDate(tasks: Task[], iso: string): Task[] {
     });
 }
 
+/**
+ * Tareas a mostrar en la vista del día: las que ocurren esa fecha
+ * (excluyendo las generales sin cita concreta) más todos sus ancestros,
+ * para que al ver una sub-tarea del día salga la cadena de padres hasta la raíz.
+ */
+export function dayTreeTasks(tasks: Task[], iso: string): Task[] {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const relevant = new Set<number>();
+  const matching: number[] = [];
+  for (const t of tasks) {
+    if (occursOnDate(t, iso) && taskTypeOf(t) !== 'general') {
+      matching.push(t.id);
+      relevant.add(t.id);
+    }
+  }
+  for (const id of matching) {
+    let cur = byId.get(id);
+    while (cur?.parentId != null) {
+      relevant.add(cur.parentId);
+      cur = byId.get(cur.parentId);
+    }
+  }
+  return tasks.filter((t) => relevant.has(t.id));
+}
+
 /** Construye el árbol de sub-tareas a partir de una lista plana (solo raíces). */
 export function buildTree<T extends { id: number; parentId: number | null }>(items: T[]): T[] {
   const byId = new Map<number, T>(items.map((t) => [t.id, t]));

@@ -105,6 +105,18 @@ export default function TaskModal() {
     ]);
   }
 
+  function confirmCancel() {
+    const cancelAction = () => setStatus('cancelled', 'Tarea cancelada');
+    if (current.status === 'cancelled') {
+      setStatus('pending', 'Tarea reactivada');
+      return;
+    }
+    Alert.alert('Cancelar tarea', `¿Cancelar "${current.title}"? Podrás reactivarla después desde este mismo menú.`, [
+      { text: 'No', style: 'cancel' },
+      { text: 'Cancelar tarea', style: 'destructive', onPress: cancelAction },
+    ]);
+  }
+
   function renderChild(t: Task, depth: number): ReactElement {
     const grand = childrenOf.get(t.id) ?? [];
     const showChildren = expanded.has(t.id);
@@ -197,6 +209,12 @@ export default function TaskModal() {
           icon={current.status === 'paused' ? 'play' : 'pause'}
           label={current.status === 'paused' ? 'Reanudar' : 'Pausar'}
           onPress={() => setStatus(current.status === 'paused' ? 'pending' : 'paused', current.status === 'paused' ? 'Reanudada' : 'En pausa')}
+        />
+        <ActionBtn
+          icon={current.status === 'cancelled' ? 'refresh' : 'close-circle'}
+          label={current.status === 'cancelled' ? 'Reactivar' : 'Cancelar'}
+          danger={current.status !== 'cancelled'}
+          onPress={confirmCancel}
         />
         <ActionBtn
           icon="trash"

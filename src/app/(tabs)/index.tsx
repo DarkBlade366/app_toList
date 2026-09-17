@@ -15,13 +15,13 @@ import { Task } from '@/lib/schema';
 import {
   addDays,
   buildTree,
+  dayTreeTasks,
   formatDateLong,
   groupTasksByParent,
   isOverdue,
   sortByPriority,
   statusForDate,
   taskTypeOf,
-  tasksForDate,
   todayISO,
 } from '@/lib/logic';
 
@@ -55,7 +55,7 @@ export default function TodayScreen() {
   );
 
   const dayTasks = sortByPriority(
-    tasksForDate(tasks, date).filter((t) => statusForDate(t, completed, date) !== 'cancelled')
+    dayTreeTasks(tasks, date).filter((t) => statusForDate(t, completed, date) !== 'cancelled')
   );
 
   const generalIds = new Set<number>();
