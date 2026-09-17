@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import { useRouter, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect } from 'react';
@@ -6,6 +5,7 @@ import { AppState } from 'react-native';
 
 import * as db from '@/lib/db';
 import {
+  addNotificationResponseListener,
   hasNotificationPermission,
   requestNotificationPermission,
   syncNotifications,
@@ -38,15 +38,17 @@ export function NotificationsManager() {
       if (state === 'active') void syncNotifications(sqlite);
     });
 
-    const response = Notifications.addNotificationResponseReceivedListener((res) => {
-      const url = res.notification.request.content.data?.url;
-      if (typeof url === 'string') router.push(url as Href);
+    let response: { remove: () => void } | undefined;
+    addNotificationResponseListener((url) => {
+      router.push(url as Href);
+    }).then((sub) => {
+      response = sub;
     });
 
     return () => {
       cancelled = true;
       appState.remove();
-      response.remove();
+      response?.remove();
     };
   }, [sqlite, router]);
 

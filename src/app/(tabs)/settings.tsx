@@ -13,6 +13,7 @@ import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import {
   hasNotificationPermission,
+  notificationsSupported,
   requestNotificationPermission,
   syncNotifications,
 } from '@/lib/notifications';
@@ -101,6 +102,18 @@ export default function SettingsScreen() {
       <ScreenHeader title="Ajustes" subtitle="Notificaciones y preferencias" />
 
       <Card>
+        {!notificationsSupported() && (
+          <Field label="Disponibilidad">
+            <View style={styles.permissionRow}>
+              <Ionicons name="construct" size={20} color={Colors.warning} />
+              <ThemedText style={styles.permissionText}>
+                Estás en Expo Go (Android), donde las notificaciones no están disponibles. Al
+                instalar la versión final (APK) se activarán solas.
+              </ThemedText>
+            </View>
+          </Field>
+        )}
+
         <Field label="Recordatorios y alarmas">
           <Row
             label="Avisos activados"

@@ -1,6 +1,7 @@
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import type * as NotificationsT from 'expo-notifications';
 
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
@@ -20,70 +21,124 @@ export const SUMMARY_CHANNEL = 'resumen-diario';
 
 const LOOKAHEAD_DAYS = 90;
 
-if (Platform.OS === 'android' || Platform.OS === 'ios') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+/**
+ * expo-notifications se elimina de Expo Go en Android desde SDK 53: importarlo
+ * lanza un error. Por eso se carga bajo demanda y solo en entornos donde existe.
+ */
+function isExpoGoAndroid(): boolean {
+  return Platform.OS === 'android' && Constants.executionEnvironment === 'storeClient';
+}
+
+const notificationsApplicable = Platform.OS === 'android' || Platform.OS === 'ios';
+
+export function notificationsSupported(): boolean {
+  return notificationsApplicable && !isExpoGoAndroid();
+}
+
+let modulePromise: Promise<typeof NotificationsT | null> | null = null;
+let handlerSet = false;
+
+async function load(): Promise<typeof NotificationsT | null> {
+  if (!notificationsApplicable || isExpoGoAndroid()) return null;
+  if (!modulePromise) {
+    modulePromise = import('expo-notifications')
+      .then((m) => {
+        if (!handlerSet) {
+          m.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldPlaySound: true,
+              shouldSetBadge: false,
+              shouldShowBanner: true,
+              shouldShowList: true,
+            }),
+          });
+          handlerSet = true;
+        }
+        return m;
+      })
+      .catch((e) => {
+        console.warn('expo-notifications no disponible en este entorno:', e);
+        return null;
+      });
+  }
+  return modulePromise;
 }
 
 export async function hasNotificationPermission(): Promise<boolean> {
+  const m = await load();
+  if (!m) return false;
   try {
-    return (await Notifications.getPermissionsAsync()).granted;
-  } catch {
+    return (await m.getPermissionsAsync()).granted;
+  } catch (e) {
+    console.warn('getPermissionsAsync falló:', e);
     return false;
   }
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
+  const m = await load();
+  if (!m) return false;
   try {
-    const s = await Notifications.requestPermissionsAsync({
+    const s = await m.requestPermissionsAsync({
       ios: { allowAlert: true, allowBadge: true, allowSound: true },
     });
     return s.granted;
-  } catch {
+  } catch (e) {
+    console.warn('requestPermissionsAsync falló:', e);
     return false;
   }
 }
 
-async function ensureChannels() {
+/**
+ * Registra una función que se ejecuta al pulsar una notificación.
+ * Devuelve un objeto con remove() para cancelar la suscripción.
+ */
+export async function addNotificationResponseListener(
+  onTap: (url: string) => void
+): Promise<{ remove: () => void }> {
+  const m = await load();
+  if (!m) return { remove: () => {} };
+  const sub = m.addNotificationResponseReceivedListener((res: NotificationsT.NotificationResponse) => {
+    const url = res?.notification?.request?.content?.data?.url;
+    if (typeof url === 'string') onTap(url);
+  });
+  return { remove: () => sub.remove() };
+}
+
+async function ensureChannels(m: typeof NotificationsT) {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync(ALARM_CHANNEL, {
+  await m.setNotificationChannelAsync(ALARM_CHANNEL, {
     name: 'Alarmas de tarea',
     description: 'Alarmas sonoras de las tareas',
-    importance: Notifications.AndroidImportance.MAX,
+    importance: m.AndroidImportance.MAX,
     sound: null,
     enableVibrate: true,
     vibrationPattern: [0, 500, 400, 500, 400, 1000],
     lightColor: Colors.alarm,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    lockscreenVisibility: m.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: true,
     showBadge: true,
   });
-  await Notifications.setNotificationChannelAsync(NOTIFICATION_CHANNEL, {
+  await m.setNotificationChannelAsync(NOTIFICATION_CHANNEL, {
     name: 'Recordatorios de tarea',
     description: 'Avisos de las tareas',
-    importance: Notifications.AndroidImportance.HIGH,
+    importance: m.AndroidImportance.HIGH,
     sound: null,
     enableVibrate: true,
     vibrationPattern: [0, 300, 200, 300],
     lightColor: Colors.tint,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    lockscreenVisibility: m.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false,
     showBadge: true,
   });
-  await Notifications.setNotificationChannelAsync(SUMMARY_CHANNEL, {
+  await m.setNotificationChannelAsync(SUMMARY_CHANNEL, {
     name: 'Resumen diario',
     description: 'Resumen de las tareas del día',
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: m.AndroidImportance.DEFAULT,
     sound: null,
     enableVibrate: false,
     lightColor: Colors.textSecondary,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    lockscreenVisibility: m.AndroidNotificationVisibility.PUBLIC,
     bypassDnd: false,
     showBadge: true,
   });
@@ -95,9 +150,15 @@ function dateAt(iso: string, hm: string): Date {
   return new Date(y, m - 1, d, hh, mm, 0, 0);
 }
 
-async function scheduleTaskReminder(task: Task, iso: string, when: Date, isStart: boolean) {
+async function scheduleTaskReminder(
+  m: typeof NotificationsT,
+  task: Task,
+  iso: string,
+  when: Date,
+  isStart: boolean
+) {
   const time = isStart ? task.startTime : task.endTime;
-  await Notifications.scheduleNotificationAsync({
+  await m.scheduleNotificationAsync({
     content: {
       title: task.title,
       body: isStart ? `Empieza a las ${formatTime(time)}` : `Termina a las ${formatTime(time)}`,
@@ -105,7 +166,7 @@ async function scheduleTaskReminder(task: Task, iso: string, when: Date, isStart
       data: { url: `/task/${task.id}` },
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      type: m.SchedulableTriggerInputTypes.DATE,
       date: when,
       channelId: task.remindType === 'alarm' ? ALARM_CHANNEL : NOTIFICATION_CHANNEL,
     },
@@ -117,10 +178,11 @@ async function scheduleTaskReminder(task: Task, iso: string, when: Date, isStart
  * ajustes. Es idempotente: primero cancela todo y vuelve a programar.
  */
 export async function syncNotifications(sqlite: SQLiteDatabase): Promise<void> {
-  if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
+  const m = await load();
+  if (!m) return;
   try {
-    await ensureChannels();
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    await ensureChannels(m);
+    await m.cancelAllScheduledNotificationsAsync();
 
     const settings = await db.getSettings(sqlite);
     const now = todayISO();
@@ -151,13 +213,13 @@ export async function syncNotifications(sqlite: SQLiteDatabase): Promise<void> {
           if (task.remindAtStart && task.startTime) {
             const when = dateAt(iso, task.startTime);
             if (when.getTime() > Date.now()) {
-              await scheduleTaskReminder(task, iso, when, true);
+              await scheduleTaskReminder(m, task, iso, when, true);
             }
           }
           if (task.endTime && before != null && before > 0 && endMin != null) {
             const when = dateAt(iso, minutesToTime(Math.max(0, endMin - before)));
             if (when.getTime() > Date.now()) {
-              await scheduleTaskReminder(task, iso, when, false);
+              await scheduleTaskReminder(m, task, iso, when, false);
             }
           }
         }
@@ -175,15 +237,18 @@ export async function syncNotifications(sqlite: SQLiteDatabase): Promise<void> {
         if (completions.has(String(t.id))) continue;
         pending++;
       }
-      await Notifications.scheduleNotificationAsync({
+      await m.scheduleNotificationAsync({
         content: {
           title: 'Resumen del día',
-          body: pending === 0 ? 'Sin tareas pendientes para hoy.' : `Tienes ${pending} tarea${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''} para hoy.`,
+          body:
+            pending === 0
+              ? 'Sin tareas pendientes para hoy.'
+              : `Tienes ${pending} tarea${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''} para hoy.`,
           color: Colors.tint,
           data: { url: '/' },
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          type: m.SchedulableTriggerInputTypes.DAILY,
           hour: hh,
           minute: mm,
           channelId: SUMMARY_CHANNEL,
