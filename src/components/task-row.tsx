@@ -70,6 +70,7 @@ export function TaskRow({
 
   return (
     <View style={[styles.row, { paddingLeft: 12 + depth * 22 }]}>
+      {hasChildren && <View style={[styles.childBar, { backgroundColor: accent }]} />}
       <Pressable
         onPress={onCheck}
         disabled={!onCheck}
@@ -127,6 +128,14 @@ const styles = StyleSheet.create({
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
+  },
+  childBar: {
+    position: 'absolute',
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderRadius: 2,
   },
   check: {
     width: 24,

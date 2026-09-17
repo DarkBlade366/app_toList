@@ -216,6 +216,46 @@ export function occurrencesWithin(
   return out;
 }
 
+export type TaskType = 'general' | 'once' | 'range' | 'daily' | 'weekly' | 'monthly';
+
+export const TASK_TYPE_ORDER: TaskType[] = ['general', 'once', 'range', 'daily', 'weekly', 'monthly'];
+
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  general: 'Tarea general',
+  once: 'Un día',
+  range: 'De tal día a tal día',
+  daily: 'Diaria',
+  weekly: 'Semanal',
+  monthly: 'Mensual',
+};
+
+export const TASK_TYPE_DESCRIPTIONS: Record<TaskType, string> = {
+  general: 'Sin fecha obligatoria, puede tener una fecha límite.',
+  once: 'Para un día concreto, con margen de tiempo opcional.',
+  range: 'Indicas el día de inicio y el día en que termina el periodo.',
+  daily: 'Se repite todos los días desde una fecha.',
+  weekly: 'Se repite alguno de los días de la semana.',
+  monthly: 'Se repite cada mes el mismo día.',
+};
+
+export function taskTypeOf(t: Pick<Task, 'recurrence' | 'startDate' | 'endDate'>): TaskType {
+  if (t.recurrence !== 'none') return t.recurrence;
+  if (!t.startDate && !t.endDate) return 'general';
+  if (!t.endDate || t.endDate === t.startDate) return 'once';
+  return 'range';
+}
+
+const PRIORITY_RANK: Record<Task['priority'], number> = { high: 3, medium: 2, low: 1 };
+
+/** Ordena tareas por prioridad (de mayor a menor) y luego por urgencia. */
+export function sortByPriority<T extends Pick<Task, 'priority' | 'endTime'>>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const pr = PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority];
+    if (pr !== 0) return pr;
+    return (parseTimeToMinutes(a.endTime) ?? 0) - (parseTimeToMinutes(b.endTime) ?? 0);
+  });
+}
+
 export function groupTasksByParent(tasks: Task[]): { roots: Task[]; childrenOf: Map<number, Task[]> } {
   const childrenOf = new Map<number, Task[]>();
   const roots: Task[] = [];

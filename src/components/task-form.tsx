@@ -71,10 +71,15 @@ function defaultType(parent: ParentCtx | null): TaskType {
 export function initialTaskFormData(
   initial?: Task | null,
   parent?: ParentCtx | null,
-  presetDate?: string | null
+  presetDate?: string | null,
+  presetType?: TaskType | null
 ): TaskFormData {
   return {
-    type: initial ? typeFromTask(initial) : presetDate ? 'once' : defaultType(parent ?? null),
+    type: initial
+      ? typeFromTask(initial)
+      : presetType ?? presetDate
+        ? 'once'
+        : defaultType(parent ?? null),
     title: initial?.title ?? '',
     notes: initial?.notes ?? '',
     parentId: initial?.parentId ?? parent?.id ?? null,
@@ -96,17 +101,19 @@ export function TaskForm({
   initialStatus = 'pending',
   parent,
   presetDate,
+  presetType,
   onSubmit,
 }: {
   initial?: Task | null;
   initialStatus?: TaskStatus;
   parent?: ParentCtx | null;
   presetDate?: string | null;
+  presetType?: TaskType | null;
   onSubmit: (data: db.TaskWrite) => Promise<boolean>;
 }) {
   const insets = useSafeAreaInsets();
   const [form, setForm] = useState<TaskFormData>(() =>
-    initialTaskFormData(initial, parent, presetDate)
+    initialTaskFormData(initial, parent, presetDate, presetType)
   );
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);

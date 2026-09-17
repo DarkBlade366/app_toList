@@ -8,6 +8,7 @@ import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
+import { Segmented } from '@/components/ui/segmented';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
@@ -17,15 +18,20 @@ import {
   formatDateLong,
   groupTasksByParent,
   isOverdue,
+  sortByPriority,
   statusForDate,
+  taskTypeOf,
   tasksForDate,
   todayISO,
 } from '@/lib/logic';
+
+type HoyTab = 'day' | 'general';
 
 export default function TodayScreen() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
   const [date, setDate] = useState(todayISO());
+  const [tab, setTab] = useState<HoyTab>('day');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -48,18 +54,42 @@ export default function TodayScreen() {
     }, [sqlite, date])
   );
 
-  const dayTasks = tasksForDate(tasks, date).filter(
-    (t) => statusForDate(t, completed, date) !== 'cancelled'
+  const dayTasks = sortByPriority(
+    tasksForDate(tasks, date).filter((t) => statusForDate(t, completed, date) !== 'cancelled')
   );
-  const tree = buildTree(dayTasks);
-  const { childrenOf } = groupTasksByParent(dayTasks);
 
-  const doneCount = dayTasks.filter((t) => statusForDate(t, completed, date) === 'completed').length;
-  const overdueCount = dayTasks.filter(
+  const generalIds = new Set<number>();
+  for (const t of tasks) {
+    if (taskTypeOf(t) === 'general') generalIds.add(t.id);
+  }
+  // Incluye también los hijos de las tareas generales (a cualquier profundidad).
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const t of tasks) {
+      if (t.parentId != null && generalIds.has(t.parentId) && !generalIds.has(t.id)) {
+        generalIds.add(t.id);
+        changed = true;
+      }
+    }
+  }
+  const generalTasks = sortByPriority(
+    tasks.filter((t) => generalIds.has(t.id) && statusForDate(t, completed, date) !== 'cancelled')
+  );
+
+  const shownTasks = tab === 'day' ? dayTasks : generalTasks;
+  const showQuick = tab === 'day' && date === todayISO();
+  const tree = buildTree(shownTasks);
+  const { childrenOf } = groupTasksByParent(shownTasks);
+
+  const doneCount = shownTasks.filter(
+    (t) => statusForDate(t, completed, date) === 'completed'
+  ).length;
+  const overdueCount = shownTasks.filter(
     (t) => isOverdue(t, date, completed) && statusForDate(t, completed, date) !== 'completed'
   ).length;
   const isToday = date === todayISO();
-  const ratio = dayTasks.length ? doneCount / dayTasks.length : 0;
+  const ratio = shownTasks.length ? doneCount / shownTasks.length : 0;
 
   async function toggle(task: Task) {
     await db.toggleTaskCompletion(sqlite, task.id, date);
@@ -126,10 +156,19 @@ export default function TodayScreen() {
         </Pressable>
       </View>
 
+      <Segmented
+        options={[
+          { key: 'day', label: 'Del día' },
+          { key: 'general', label: 'Tareas generales' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+
       <Card style={styles.summary}>
         <View style={styles.summaryRow}>
           <ThemedText style={styles.summaryDone}>{doneCount}</ThemedText>
-          <ThemedText style={styles.summaryTotal}>/ {dayTasks.length} tareas</ThemedText>
+          <ThemedText style={styles.summaryTotal}>/ {shownTasks.length} tareas</ThemedText>
           <ThemedText style={styles.summaryPct}>({Math.round(ratio * 100)}%)</ThemedText>
         </View>
         <View style={styles.bar}>
@@ -142,30 +181,52 @@ export default function TodayScreen() {
         )}
       </Card>
 
-      {isToday && (
-        <View style={styles.quickRow}>
+      {showQuick && (
+        <View style={styles.quickCol}>
           <Pressable
             style={styles.quickBtn}
-            onPress={() => router.push({ pathname: '/task/new', params: { date: todayISO() } })}>
-            <Ionicons name="add" size={16} color={Colors.tint} />
-            <ThemedText style={styles.quickLabel}>Tarea para hoy</ThemedText>
+            onPress={() =>
+              router.push({
+                pathname: '/task/new',
+                params: { type: 'once', date: todayISO() },
+              })
+            }>
+            <Ionicons name="add-circle" size={20} color={Colors.tint} />
+            <View style={styles.quickBody}>
+              <ThemedText style={styles.quickLabel}>Añadir tarea para hoy</ThemedText>
+              <ThemedText style={styles.quickHint}>
+                Tarea de un día para {formatDateLong(todayISO())}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
           </Pressable>
           <Pressable
             style={styles.quickBtn}
             onPress={() =>
-              router.push({ pathname: '/task/new', params: { date: addDays(todayISO(), 1) } })
+              router.push({
+                pathname: '/task/new',
+                params: { type: 'once', date: addDays(todayISO(), 1) },
+              })
             }>
-            <Ionicons name="add" size={16} color={Colors.tint} />
-            <ThemedText style={styles.quickLabel}>Para mañana</ThemedText>
+            <Ionicons name="add-circle" size={20} color={Colors.tint} />
+            <View style={styles.quickBody}>
+              <ThemedText style={styles.quickLabel}>Añadir tarea para mañana</ThemedText>
+              <ThemedText style={styles.quickHint}>
+                Tarea de un día para {formatDateLong(addDays(todayISO(), 1))}
+              </ThemedText>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
           </Pressable>
         </View>
       )}
 
       <View style={styles.list}>
-        {dayTasks.length === 0 ? (
+        {shownTasks.length === 0 ? (
           <Card>
             <ThemedText style={{ color: Colors.muted, textAlign: 'center', padding: 16 }}>
-              Sin tareas para este día.
+              {tab === 'general'
+                ? 'Sin tareas generales para este día. Crea una tarea general o pínchala a esta fecha desde su detalle.'
+                : 'Sin tareas para este día.'}
             </ThemedText>
           </Card>
         ) : (
@@ -200,20 +261,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barFill: { height: 6, borderRadius: 3, backgroundColor: Colors.tint },
-  quickRow: { flexDirection: 'row', gap: 10 },
+  quickCol: { gap: 10 },
   quickBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    gap: 10,
     backgroundColor: Colors.surface,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
   },
-  quickLabel: { color: Colors.tint, fontSize: 13, fontWeight: '700' },
+  quickBody: { flex: 1 },
+  quickLabel: { color: Colors.tint, fontSize: 14, fontWeight: '700' },
+  quickHint: { color: Colors.muted, fontSize: 12, marginTop: 2 },
   list: {
     backgroundColor: Colors.card,
     borderRadius: 14,

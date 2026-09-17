@@ -1,0 +1,187 @@
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import { ReactElement, useCallback, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { TaskRow } from '@/components/task-row';
+import { ThemedText } from '@/components/themed-text';
+import { Segmented } from '@/components/ui/segmented';
+import { Colors } from '@/constants/theme';
+import * as db from '@/lib/db';
+import { Task } from '@/lib/schema';
+import {
+  TASK_TYPE_LABELS,
+  TaskType,
+  buildTree,
+  groupTasksByParent,
+  isRecurring,
+  taskTypeOf,
+  todayISO,
+} from '@/lib/logic';
+
+type Filter = 'all' | 'todo' | 'done' | 'paused' | 'cancelled';
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'all', label: 'Todas' },
+  { key: 'todo', label: 'Pendientes' },
+  { key: 'done', label: 'Hechas' },
+  { key: 'paused', label: 'Pausadas' },
+  { key: 'cancelled', label: 'Canceladas' },
+];
+
+export default function TaskTypeScreen() {
+  const sqlite = useSQLiteContext();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { type } = useLocalSearchParams<{ type: string }>();
+  const taskType = (TASK_TYPE_LABELS[type as TaskType] ? type : 'general') as TaskType;
+
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [filter, setFilter] = useState<Filter>('all');
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      db.getTasks(sqlite).then((list) => {
+        if (active) setTasks(list);
+      });
+      return () => {
+        active = false;
+      };
+    }, [sqlite])
+  );
+
+  const today = todayISO();
+
+  function applyFilter(t: Task): boolean {
+    switch (filter) {
+      case 'all':
+        return true;
+      case 'todo':
+        return t.status === 'pending' || t.status === 'in_progress';
+      case 'done':
+        return t.status === 'completed';
+      case 'paused':
+        return t.status === 'paused';
+      case 'cancelled':
+        return t.status === 'cancelled';
+    }
+  }
+
+  const visible = tasks.filter((t) => taskTypeOf(t) === taskType).filter(applyFilter);
+  const tree = buildTree(visible);
+  const { childrenOf } = groupTasksByParent(visible);
+
+  async function toggle(task: Task) {
+    await db.toggleTaskCompletion(sqlite, task.id, today);
+    setTasks(await db.getTasks(sqlite));
+  }
+
+  function renderNode(task: Task): ReactElement | null {
+    const children = childrenOf.get(task.id) ?? [];
+    const showChildren = expanded.has(task.id);
+    const isDone = task.status === 'completed';
+    return (
+      <View key={task.id}>
+        <TaskRow
+          task={task}
+          depth={0}
+          checked={isDone}
+          paused={task.status === 'paused'}
+          cancelled={task.status === 'cancelled'}
+          hasChildren={children.length > 0}
+          expanded={showChildren}
+          onToggleExpand={() =>
+            setExpanded((s) => {
+              const next = new Set(s);
+              if (next.has(task.id)) next.delete(task.id);
+              else next.add(task.id);
+              return next;
+            })
+          }
+          onCheck={() => (isRecurring(task) ? toggle(task) : undefined)}
+          onPress={() => router.push(`/task/${task.id}`)}
+        />
+        {showChildren && children.map(renderNode)}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.flex, { paddingTop: insets.top + 8 }]}>
+      <View style={styles.head}>
+        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.back}>
+          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+        </Pressable>
+        <ThemedText style={styles.title}>{TASK_TYPE_LABELS[taskType]}</ThemedText>
+        <View style={{ width: 34 }} />
+      </View>
+
+      <View style={styles.content}>
+        <Segmented options={FILTERS} value={filter} onChange={setFilter} />
+
+        {visible.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="file-tray-outline" size={40} color={Colors.muted} />
+            <ThemedText style={styles.emptyText}>
+              No hay tareas de este tipo. Pulsa + para añadir una.
+            </ThemedText>
+            <Pressable
+              style={styles.addBtn}
+              onPress={() => router.push({ pathname: '/task/new', params: { type: taskType } })}>
+              <Ionicons name="add" size={18} color={Colors.white} />
+              <ThemedText style={styles.addText}>Nueva {TASK_TYPE_LABELS[taskType]}</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.list}>{tree.map(renderNode)}</View>
+            <Pressable
+              style={styles.addBtn}
+              onPress={() => router.push({ pathname: '/task/new', params: { type: taskType } })}>
+              <Ionicons name="add" size={18} color={Colors.white} />
+              <ThemedText style={styles.addText}>Nueva {TASK_TYPE_LABELS[taskType]}</ThemedText>
+            </Pressable>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: Colors.background },
+  head: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  back: { width: 34 },
+  title: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  content: { paddingHorizontal: 16, gap: 14, flex: 1 },
+  empty: { alignItems: 'center', gap: 10, paddingVertical: 32 },
+  emptyText: { color: Colors.muted, textAlign: 'center' },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: Colors.tint,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  addText: { color: Colors.white, fontWeight: '700' },
+  list: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+    overflow: 'hidden',
+  },
+});

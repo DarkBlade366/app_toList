@@ -9,13 +9,23 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
+import { TaskType } from '@/lib/logic';
 
 export default function NewTaskModal() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
   const toast = useToast();
-  const { parentId, date } = useLocalSearchParams<{ parentId?: string; date?: string }>();
+  const { parentId, date, type } = useLocalSearchParams<{
+    parentId?: string;
+    date?: string;
+    type?: string;
+  }>();
   const parent = parentId ? Number(parentId) : null;
+  const presetType =
+    type === 'general' || type === 'once' || type === 'range' || type === 'daily' ||
+    type === 'weekly' || type === 'monthly'
+      ? (type as TaskType)
+      : null;
 
   const [parentCtx, setParentCtx] = useState<ParentCtx | null>(null);
 
@@ -44,6 +54,7 @@ export default function NewTaskModal() {
       <TaskForm
         parent={parentCtx}
         presetDate={date ?? null}
+        presetType={presetType}
         onSubmit={async (data) => {
           await db.addTask(sqlite, { ...data, parentId: parentCtx?.id ?? data.parentId ?? null });
           toast.show('Tarea añadida', 'success');
