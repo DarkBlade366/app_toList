@@ -14,6 +14,7 @@ import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
 import { groupTasksByParent, statusForDate, todayISO } from '@/lib/logic';
+import { syncNotifications } from '@/lib/notifications';
 
 export default function TaskModal() {
   const sqlite = useSQLiteContext();
@@ -80,12 +81,14 @@ export default function TaskModal() {
 
   async function toggleToday() {
     await db.toggleTaskCompletion(sqlite, current.id, today);
+    void syncNotifications(sqlite);
     toast.show(state === 'completed' ? 'Deshecho' : '¡Bien hecho!', 'success');
     await refresh();
   }
 
   async function setStatus(status: db.TaskStatus, msg: string) {
     await db.setTaskStatus(sqlite, current.id, status);
+    void syncNotifications(sqlite);
     toast.show(msg, 'info');
     await refresh();
   }
@@ -98,6 +101,7 @@ export default function TaskModal() {
         style: 'destructive',
         onPress: async () => {
           await db.deleteTask(sqlite, current.id);
+          void syncNotifications(sqlite);
           toast.show('Tarea eliminada', 'info');
           router.back();
         },
@@ -163,6 +167,7 @@ export default function TaskModal() {
           parent={parentCtx}
           onSubmit={async (data) => {
             await db.updateTask(sqlite, current.id, data);
+            void syncNotifications(sqlite);
             toast.show('Tarea actualizada', 'success');
             setEditing(false);
             await refresh();

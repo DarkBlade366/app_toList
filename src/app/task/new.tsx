@@ -10,6 +10,7 @@ import { useToast } from '@/components/toast';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { TaskType } from '@/lib/logic';
+import { syncNotifications } from '@/lib/notifications';
 
 export default function NewTaskModal() {
   const sqlite = useSQLiteContext();
@@ -28,6 +29,26 @@ export default function NewTaskModal() {
       : null;
 
   const [parentCtx, setParentCtx] = useState<ParentCtx | null>(null);
+  const [defaults, setDefaults] = useState<{
+    remindType: db.RemindType;
+    remindBeforeMinutes: number;
+    remindAtStart: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    db.getSettings(sqlite).then((s) => {
+      if (!active) return;
+      setDefaults({
+        remindType: s.defaultRemindType,
+        remindBeforeMinutes: s.defaultRemindBeforeMinutes,
+        remindAtStart: s.remindAtStartDefault,
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [sqlite]);
 
   useEffect(() => {
     if (parent == null) return;
@@ -55,8 +76,10 @@ export default function NewTaskModal() {
         parent={parentCtx}
         presetDate={date ?? null}
         presetType={presetType}
+        defaults={defaults ?? undefined}
         onSubmit={async (data) => {
           await db.addTask(sqlite, { ...data, parentId: parentCtx?.id ?? data.parentId ?? null });
+          void syncNotifications(sqlite);
           toast.show('Tarea añadida', 'success');
           router.back();
           return true;

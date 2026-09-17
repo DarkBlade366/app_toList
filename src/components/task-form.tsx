@@ -72,7 +72,8 @@ export function initialTaskFormData(
   initial?: Task | null,
   parent?: ParentCtx | null,
   presetDate?: string | null,
-  presetType?: TaskType | null
+  presetType?: TaskType | null,
+  defaults?: { remindType: RemindType; remindBeforeMinutes: number; remindAtStart: boolean }
 ): TaskFormData {
   return {
     type: initial
@@ -90,9 +91,9 @@ export function initialTaskFormData(
     endDate: initial?.endDate ?? null,
     startTime: initial?.startTime ?? null,
     endTime: initial?.endTime ?? null,
-    remindType: initial?.remindType ?? 'none',
-    remindBeforeMinutes: initial?.remindBeforeMinutes ?? 15,
-    remindAtStart: initial?.remindAtStart ?? false,
+    remindType: initial?.remindType ?? defaults?.remindType ?? 'none',
+    remindBeforeMinutes: initial?.remindBeforeMinutes ?? defaults?.remindBeforeMinutes ?? 15,
+    remindAtStart: initial?.remindAtStart ?? defaults?.remindAtStart ?? false,
   };
 }
 
@@ -103,6 +104,7 @@ export function TaskForm({
   presetDate,
   presetType,
   onSubmit,
+  defaults,
 }: {
   initial?: Task | null;
   initialStatus?: TaskStatus;
@@ -110,10 +112,11 @@ export function TaskForm({
   presetDate?: string | null;
   presetType?: TaskType | null;
   onSubmit: (data: db.TaskWrite) => Promise<boolean>;
+  defaults?: { remindType: RemindType; remindBeforeMinutes: number; remindAtStart: boolean };
 }) {
   const insets = useSafeAreaInsets();
   const [form, setForm] = useState<TaskFormData>(() =>
-    initialTaskFormData(initial, parent, presetDate, presetType)
+    initialTaskFormData(initial, parent, presetDate, presetType, defaults)
   );
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
