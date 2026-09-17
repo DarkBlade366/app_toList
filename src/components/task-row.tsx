@@ -51,6 +51,7 @@ export function TaskRow({
   onToggleExpand,
   onCheck,
   onPress,
+  extraMeta,
 }: {
   task: Task;
   checked?: boolean;
@@ -64,6 +65,7 @@ export function TaskRow({
   onToggleExpand?: () => void;
   onCheck?: () => void;
   onPress?: () => void;
+  extraMeta?: string;
 }) {
   const accent = overdue && !checked ? Colors.danger : PRIORITY_COLORS[task.priority];
   const muted = checked || cancelled;
@@ -100,7 +102,7 @@ export function TaskRow({
           {task.title}
         </ThemedText>
         <ThemedText style={styles.meta} numberOfLines={2}>
-          {[taskMeta(task), overdue ? 'vencida' : null, paused ? 'en pausa' : null]
+          {[extraMeta, taskMeta(task), overdue ? 'vencida' : null, paused ? 'en pausa' : null]
             .filter(Boolean)
             .join(' · ')}
         </ThemedText>

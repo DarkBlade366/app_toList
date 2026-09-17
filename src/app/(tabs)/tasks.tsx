@@ -87,6 +87,22 @@ export default function TasksScreen() {
           );
         })}
       </View>
+
+      <Pressable
+        style={styles.filterCard}
+        onPress={() => router.push('/task-filter')}>
+        <View style={styles.filterIcon}>
+          <Ionicons name="funnel" size={18} color={Colors.tint} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <ThemedText style={styles.filterTitle}>Filtro general</ThemedText>
+          <ThemedText style={styles.filterDesc}>
+            Busca entre todas las tareas sin fijar el tipo: hechas, pendientes, pausadas o
+            canceladas. Las que tienen padres o hijas lo indican.
+          </ThemedText>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
+      </Pressable>
     </Screen>
   );
 }
@@ -145,4 +161,27 @@ const styles = StyleSheet.create({
     borderColor: Colors.border,
   },
   countText: { fontSize: 14, fontWeight: '700', color: Colors.tint },
+  filterCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 14,
+    marginTop: 4,
+  },
+  filterIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.card,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterTitle: { fontSize: 16, fontWeight: '800', color: Colors.tint },
+  filterDesc: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
 });

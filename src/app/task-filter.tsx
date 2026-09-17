@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { ReactElement, useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -11,35 +11,24 @@ import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
-import {
-  TASK_TYPE_LABELS,
-  TaskType,
-  buildTree,
-  groupTasksByParent,
-  isRecurring,
-  taskTypeOf,
-  todayISO,
-} from '@/lib/logic';
+import { buildTree, groupTasksByParent, sortByPriority } from '@/lib/logic';
 
-type Filter = 'all' | 'todo' | 'done' | 'paused' | 'cancelled';
+type StatusFilter = 'all' | 'pending' | 'completed' | 'paused' | 'cancelled';
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Todas' },
-  { key: 'todo', label: 'Pendientes' },
-  { key: 'done', label: 'Hechas' },
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: 'all', label: 'Todas las tareas' },
+  { key: 'pending', label: 'Pendientes' },
+  { key: 'completed', label: 'Hechas' },
   { key: 'paused', label: 'Pausadas' },
   { key: 'cancelled', label: 'Canceladas' },
 ];
 
-export default function TaskTypeScreen() {
+export default function TaskFilterScreen() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { type } = useLocalSearchParams<{ type: string }>();
-  const taskType = (TASK_TYPE_LABELS[type as TaskType] ? type : 'general') as TaskType;
-
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<StatusFilter>('pending');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   useFocusEffect(
@@ -54,15 +43,15 @@ export default function TaskTypeScreen() {
     }, [sqlite])
   );
 
-  const today = todayISO();
+  const byId = new Map(tasks.map((t) => [t.id, t]));
 
   function applyFilter(t: Task): boolean {
     switch (filter) {
       case 'all':
         return true;
-      case 'todo':
+      case 'pending':
         return t.status === 'pending' || t.status === 'in_progress';
-      case 'done':
+      case 'completed':
         return t.status === 'completed';
       case 'paused':
         return t.status === 'paused';
@@ -71,27 +60,27 @@ export default function TaskTypeScreen() {
     }
   }
 
-  const visible = tasks.filter((t) => taskTypeOf(t) === taskType).filter(applyFilter);
+  const visible = sortByPriority(tasks.filter(applyFilter));
   const tree = buildTree(visible);
   const { childrenOf } = groupTasksByParent(visible);
-
-  async function toggle(task: Task) {
-    await db.toggleTaskCompletion(sqlite, task.id, today);
-    setTasks(await db.getTasks(sqlite));
-  }
 
   function renderNode(task: Task): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const showChildren = expanded.has(task.id);
-    const isDone = task.status === 'completed';
+    const parent = task.parentId != null ? byId.get(task.parentId) : undefined;
+    const meta: string[] = [];
+    if (parent) meta.push(`hija de "${parent.title}"`);
+    if (children.length > 0) meta.push(`${children.length} tarea${children.length > 1 ? 's' : ''} dentro`);
+    const extraMeta = meta.join(' · ') || undefined;
+
     return (
       <View key={task.id}>
         <TaskRow
           task={task}
-          depth={0}
-          checked={isDone}
+          checked={task.status === 'completed'}
           paused={task.status === 'paused'}
           cancelled={task.status === 'cancelled'}
+          depth={0}
           hasChildren={children.length > 0}
           expanded={showChildren}
           onToggleExpand={() =>
@@ -102,8 +91,8 @@ export default function TaskTypeScreen() {
               return next;
             })
           }
-          onCheck={() => (isRecurring(task) ? toggle(task) : undefined)}
           onPress={() => router.push(`/task/${task.id}`)}
+          extraMeta={extraMeta}
         />
         {showChildren && children.map(renderNode)}
       </View>
@@ -116,39 +105,29 @@ export default function TaskTypeScreen() {
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.back}>
           <Ionicons name="arrow-back" size={24} color={Colors.text} />
         </Pressable>
-        <ThemedText style={styles.title}>{TASK_TYPE_LABELS[taskType]}</ThemedText>
-        <View style={{ width: 34 }} />
+        <View style={{ flex: 1 }}>
+          <ThemedText style={styles.title}>Filtro general</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            Todas las tareas, de cualquier tipo, según su estado
+          </ThemedText>
+        </View>
       </View>
 
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
-        <FilterDropdown options={FILTERS} value={filter} onChange={setFilter} />
+        <FilterDropdown options={STATUS_FILTERS} value={filter} onChange={setFilter} />
 
         {visible.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="file-tray-outline" size={40} color={Colors.muted} />
             <ThemedText style={styles.emptyText}>
-              No hay tareas de este tipo. Pulsa + para añadir una.
+              No hay tareas {filter === 'all' ? '' : `con estado "${STATUS_FILTERS.find((f) => f.key === filter)?.label}"`}.
             </ThemedText>
-            <Pressable
-              style={styles.addBtn}
-              onPress={() => router.push({ pathname: '/task/new', params: { type: taskType } })}>
-              <Ionicons name="add" size={18} color={Colors.white} />
-              <ThemedText style={styles.addText}>Nueva {TASK_TYPE_LABELS[taskType]}</ThemedText>
-            </Pressable>
           </View>
         ) : (
-          <>
-            <View style={styles.list}>{tree.map(renderNode)}</View>
-            <Pressable
-              style={styles.addBtn}
-              onPress={() => router.push({ pathname: '/task/new', params: { type: taskType } })}>
-              <Ionicons name="add" size={18} color={Colors.white} />
-              <ThemedText style={styles.addText}>Nueva {TASK_TYPE_LABELS[taskType]}</ThemedText>
-            </Pressable>
-          </>
+          <View style={styles.list}>{tree.map(renderNode)}</View>
         )}
       </ScrollView>
     </View>
@@ -160,25 +139,14 @@ const styles = StyleSheet.create({
   head: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 10,
     paddingHorizontal: 16,
     paddingBottom: 8,
   },
   back: { width: 34 },
   title: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  subtitle: { fontSize: 12, color: Colors.muted, marginTop: 2 },
   content: { paddingHorizontal: 16, gap: 14, paddingBottom: 32 },
-  empty: { alignItems: 'center', gap: 10, paddingVertical: 32 },
-  emptyText: { color: Colors.muted, textAlign: 'center' },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: Colors.tint,
-    borderRadius: 12,
-    paddingVertical: 12,
-  },
-  addText: { color: Colors.white, fontWeight: '700' },
   list: {
     backgroundColor: Colors.card,
     borderRadius: 14,
@@ -187,4 +155,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     overflow: 'hidden',
   },
+  empty: { alignItems: 'center', gap: 10, paddingVertical: 32 },
+  emptyText: { color: Colors.muted, textAlign: 'center' },
 });
