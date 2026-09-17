@@ -8,9 +8,11 @@
     "scheme": "metasclaras",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.metasclaras.app"
     },
     "android": {
+      "package": "com.metasclaras.app",
       "adaptiveIcon": {
         "backgroundColor": "#0B0F17",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
