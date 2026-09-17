@@ -1,10 +1,17 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import { addMinutesToTime, isValidTime, minutesToTime } from '@/lib/logic';
+
+/** Inserta los dos puntos de HH:MM a partir de solo dígitos (no se pueden borrar). */
+function maskTime(digits: string): string {
+  const d = digits.replace(/\D/g, '').slice(0, 4);
+  if (d.length <= 2) return d;
+  return `${d.slice(0, 2)}:${d.slice(2, 4)}`;
+}
 
 export function TimeField({
   label,
@@ -17,6 +24,18 @@ export function TimeField({
 }) {
   const [text, setText] = useState(value ?? '');
 
+  function handleChange(raw: string) {
+    const masked = maskTime(raw);
+    setText(masked);
+    if (masked === '') {
+      onChange(null);
+      return;
+    }
+    if (isValidTime(masked)) {
+      onChange(masked);
+    }
+  }
+
   function step(delta: number) {
     const base = text && isValidTime(text) ? text : value ?? minutesToTime(12 * 60);
     const next = addMinutesToTime(base, delta);
@@ -25,19 +44,6 @@ export function TimeField({
   }
 
   const showError = text.length > 0 && !isValidTime(text);
-
-  function commitDeleted() {
-    if (text === '') {
-      onChange(null);
-      return;
-    }
-    if (!isValidTime(text)) {
-      const cleaned = text.replace(/[^0-9]/g, '').padStart(4, '0');
-      const t = `${cleaned.slice(0, 2)}:${cleaned.slice(2, 4)}`;
-      setText(isValidTime(t) ? t : '');
-      onChange(isValidTime(t) ? t : null);
-    }
-  }
 
   return (
     <View style={styles.wrap}>
@@ -53,11 +59,7 @@ export function TimeField({
           placeholderTextColor={Colors.muted}
           selectionColor={Colors.tint}
           value={text}
-          onBlur={commitDeleted}
-          onChangeText={(t) => {
-            setText(t);
-            if (isValidTime(t)) onChange(t);
-          }}
+          onChangeText={handleChange}
         />
         <Pressable style={styles.btn} onPress={() => step(15)}>
           <Ionicons name="add" size={20} color={Colors.muted} />

@@ -5,6 +5,15 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { addDays, formatDateDMY, parseDateDMY, todayISO } from '@/lib/logic';
 
+/** Inserta las barras de DD/MM/AAAA a partir de solo dígitos (no se pueden borrar). */
+function maskDate(digits: string): string {
+  const d = digits.replace(/\D/g, '').slice(0, 8);
+  let out = d.slice(0, 2);
+  if (d.length > 2) out += '/' + d.slice(2, 4);
+  if (d.length > 4) out += '/' + d.slice(4);
+  return out;
+}
+
 export function DateField({
   label,
   value,
@@ -23,13 +32,11 @@ export function DateField({
     setText(iso ? formatDateDMY(iso) : '');
   }
 
-  function commit(raw: string) {
-    const iso = parseDateDMY(raw);
-    if (iso) {
-      pick(iso);
-    } else {
-      setText(raw);
-    }
+  function handleChange(raw: string) {
+    const masked = maskDate(raw);
+    setText(masked);
+    const iso = parseDateDMY(masked);
+    onChange(iso ?? null);
   }
 
   const chipLabels = (d: number) =>
@@ -45,12 +52,7 @@ export function DateField({
         placeholderTextColor={Colors.muted}
         selectionColor={Colors.tint}
         value={text}
-        onChangeText={(t) => {
-          setText(t);
-          const iso = parseDateDMY(t);
-          if (iso) onChange(iso);
-        }}
-        onBlur={() => commit(text)}
+        onChangeText={handleChange}
       />
       <View style={styles.chips}>
         {hints.map((d) => {
