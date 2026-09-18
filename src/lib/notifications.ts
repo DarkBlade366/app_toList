@@ -198,7 +198,9 @@ export async function syncNotifications(sqlite: SQLiteDatabase): Promise<void> {
       }
 
       for (const task of tasks) {
-        if (task.status === 'cancelled' || task.status === 'completed') continue;
+        if (task.status === 'cancelled' || task.status === 'completed' || task.status === 'paused') {
+          continue;
+        }
         if (task.remindType === 'none') continue;
         const before = task.remindBeforeMinutes ?? settings.defaultRemindBeforeMinutes;
         const endMin = parseTimeToMinutes(task.endTime);
@@ -232,7 +234,9 @@ export async function syncNotifications(sqlite: SQLiteDatabase): Promise<void> {
       const completions = await db.getCompletionsSetForDate(sqlite, now);
       let pending = 0;
       for (const t of tasks) {
-        if (t.status === 'cancelled' || t.status === 'completed') continue;
+        if (t.status === 'cancelled' || t.status === 'completed' || t.status === 'paused') {
+          continue;
+        }
         if (!occursOnDate(t, now)) continue;
         if (completions.has(String(t.id))) continue;
         pending++;

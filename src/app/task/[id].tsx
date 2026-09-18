@@ -15,7 +15,7 @@ import { Field } from '@/components/ui/field';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
-import { formatDateDMY, groupTasksByParent, statusForDate, todayISO } from '@/lib/logic';
+import { formatDateDMY, completionDateFor, groupTasksByParent, statusForDate, todayISO } from '@/lib/logic';
 import { syncNotifications } from '@/lib/notifications';
 
 export default function TaskModal() {
@@ -82,8 +82,9 @@ export default function TaskModal() {
   }
 
   async function toggleToday() {
+    const date = completionDateFor(current, today);
     const wasDone = state === 'completed';
-    await db.toggleTaskCompletion(sqlite, current.id, today);
+    await db.toggleTaskCompletion(sqlite, current.id, date);
     void Haptics.impactAsync(!wasDone ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
     void syncNotifications(sqlite);
     toast.show(wasDone ? 'Deshecho' : '¡Bien hecho!', 'success');

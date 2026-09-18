@@ -12,6 +12,7 @@ export interface Task {
   title: string;
   notes: string | null;
   parentId: number | null;
+  sortOrder: number;
   recurrence: Recurrence;
   recurrenceDays: number[] | null;
   monthlyDay: number | null;
@@ -53,7 +54,7 @@ const SETTING_DEFAULTS: Record<keyof Settings, string> = {
 };
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 2;
+  const DATABASE_VERSION = 3;
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = versionRow?.user_version ?? 0;
 
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   notes TEXT,
   parent_id INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   recurrence TEXT NOT NULL DEFAULT 'none',
   recurrence_days TEXT,
   monthly_day INTEGER,
@@ -90,6 +92,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks (parent_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks (sort_order);
 
 CREATE TABLE IF NOT EXISTS task_completions (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -118,7 +121,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES ${Object.entries(SETTING_DEFA
     if (initialized?.value !== '1') {
       await db.runAsync("INSERT OR IGNORE INTO settings (key, value) VALUES ('initialized', '1')");
     }
-    currentDbVersion = 2;
+    currentDbVersion = 3;
   } else if (currentDbVersion === 1) {
     await db.execAsync(`
 PRAGMA foreign_keys = OFF;
@@ -128,6 +131,7 @@ CREATE TABLE tasks_v2 (
   title TEXT NOT NULL,
   notes TEXT,
   parent_id INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   recurrence TEXT NOT NULL DEFAULT 'none',
   recurrence_days TEXT,
   monthly_day INTEGER,
@@ -158,10 +162,18 @@ DROP TABLE tasks;
 ALTER TABLE tasks_v2 RENAME TO tasks;
 DROP TABLE IF EXISTS objectives;
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks (parent_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks (sort_order);
 COMMIT;
 `);
-    currentDbVersion = 2;
+    currentDbVersion = 3;
+  } else if (currentDbVersion === 2) {
+    await db.execAsync(`
+ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks (sort_order);
+`);
+    currentDbVersion = 3;
   }
 
+  await db.execAsync('PRAGMA foreign_keys = ON');
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
 }

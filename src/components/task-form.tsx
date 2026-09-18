@@ -155,9 +155,6 @@ export function TaskForm({
     setError(null);
   }
 
-  const wantsEndDate =
-    form.type === 'range' || (form.type !== 'general' && form.type !== 'once' && form.endDate != null);
-
   function validateSchedule(): string | null {
     if (form.type === 'range') {
       if (!form.startDate || !form.endDate) return 'Indica desde y hasta qué día.';
@@ -299,7 +296,7 @@ export function TaskForm({
           </View>
         )}
 
-        {step === 1 && <ScheduleStep form={form} parent={parent} set={set} wantsEndDate={wantsEndDate} />}
+        {step === 1 && <ScheduleStep form={form} parent={parent} set={set} />}
 
         {step === 2 && (
           <View style={styles.step}>
@@ -380,12 +377,10 @@ function ScheduleStep({
   form,
   parent,
   set,
-  wantsEndDate,
 }: {
   form: TaskFormData;
   parent?: ParentCtx | null;
   set: (patch: Partial<TaskFormData>) => void;
-  wantsEndDate: boolean;
 }) {
   const hintDates = parent
     ? (() => {

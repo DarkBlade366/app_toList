@@ -33,19 +33,26 @@ function AckRow({
   hint,
   icon,
   danger,
+  disabled,
   onPress,
 }: {
   label: string;
   hint?: string;
   icon: keyof typeof Ionicons.glyphMap;
   danger?: boolean;
+  disabled?: boolean;
   onPress: () => void;
 }) {
   const tone = danger ? Colors.danger : Colors.tint;
   return (
     <Pressable
-      style={({ pressed }) => [styles.ackRow, pressed && { opacity: 0.7 }]}
-      onPress={onPress}>
+      style={({ pressed }) => [
+        styles.ackRow,
+        pressed && !disabled && { opacity: 0.7 },
+        disabled && { opacity: 0.4 },
+      ]}
+      onPress={onPress}
+      disabled={disabled}>
       <View style={[styles.ackIcon, { borderColor: tone }, danger && { backgroundColor: 'rgba(248,113,113,0.12)' }]}>
         <Ionicons name={icon} size={20} color={tone} />
       </View>
@@ -329,6 +336,7 @@ export default function SettingsScreen() {
             label="Probar alarma y aviso"
             hint="Lanza una notificación de ejemplo en 2 segundos."
             icon="alarm-outline"
+            disabled={busy != null}
             onPress={onTestNotification}
           />
         </Field>
@@ -337,6 +345,7 @@ export default function SettingsScreen() {
             label="Exportar mis tareas (JSON)"
             hint="Comparte o guarda una copia de tareas, completados y ajustes."
             icon="download-outline"
+            disabled={busy != null}
             onPress={onExport}
           />
         </Field>

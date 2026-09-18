@@ -15,7 +15,7 @@ import { SubtaskGroup } from '@/components/subtask-group';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
-import { buildTree, groupTasksByParent, sortByPriority, statusForDate, todayISO } from '@/lib/logic';
+import { buildTree, completionDateFor, groupTasksByParent, sortByPriority, statusForDate, todayISO } from '@/lib/logic';
 
 type StatusFilter = 'all' | 'pending' | 'completed' | 'paused' | 'cancelled';
 
@@ -92,14 +92,15 @@ export default function TaskFilterScreen() {
   const { childrenOf } = groupTasksByParent(visible);
 
   async function toggle(task: Task) {
-    const wasDone = statusForDate(task, completed, today) === 'completed';
-    const done = await db.toggleTaskCompletion(sqlite, task.id, today);
+    const date = completionDateFor(task, today);
+    const wasDone = statusForDate(task, completed, date) === 'completed';
+    const done = await db.toggleTaskCompletion(sqlite, task.id, date);
     void Haptics.impactAsync(done ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
     if (!wasDone && done) toast.show('Completada', 'success');
     if (wasDone) toast.show('Completado deshecho', 'info');
     const [list, comps] = await Promise.all([
       db.getTasks(sqlite),
-      db.getCompletionsSetForDate(sqlite, today),
+      db.getCompletionsSetForDate(sqlite, date),
     ]);
     setTasks(list);
     setCompleted(comps);

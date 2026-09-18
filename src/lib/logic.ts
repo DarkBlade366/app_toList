@@ -135,6 +135,17 @@ export function isRecurring(task: Pick<Task, 'recurrence'>): boolean {
 }
 
 /**
+ * Fecha con la que conviene completar/marcar una tarea fuera de la vista "Hoy":
+ * - Recurrentes: siempre hoy (se completa por día).
+ * - No recurrentes: su propio día (o hoy si es general, que no tiene fecha).
+ * Evita que desmarcar desde listas registre/compruebe filas en un día que no es el suyo.
+ */
+export function completionDateFor(task: Pick<Task, 'recurrence' | 'startDate'>, today: string): string {
+  if (isRecurring(task) || !task.startDate) return today;
+  return task.startDate;
+}
+
+/**
  * Estado efectivo de una tarea para una fecha concreta, dado el set de
  * completados de ese día. Los estados globales (cancelada/pausada) mandan siempre.
  */
@@ -296,9 +307,6 @@ export function groupTasksByParent(tasks: Task[]): { roots: Task[]; childrenOf: 
       list.push(t);
       childrenOf.set(t.parentId, list);
     }
-  }
-  for (const list of childrenOf.values()) {
-    list.sort((a, b) => a.title.localeCompare(b.title));
   }
   return { roots, childrenOf };
 }

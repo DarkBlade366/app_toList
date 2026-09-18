@@ -19,6 +19,7 @@ import {
   TASK_TYPE_LABELS,
   TaskType,
   buildTree,
+  completionDateFor,
   groupTasksByParent,
   statusForDate,
   taskTypeOf,
@@ -99,11 +100,29 @@ export default function TaskTypeScreen() {
   const { childrenOf } = groupTasksByParent(visible);
 
   async function toggle(task: Task) {
-    const wasDone = statusForDate(task, completed, today) === 'completed';
-    const done = await db.toggleTaskCompletion(sqlite, task.id, today);
+    const date = completionDateFor(task, today);
+    const wasDone = statusForDate(task, completed, date) === 'completed';
+    const done = await db.toggleTaskCompletion(sqlite, task.id, date);
     void Haptics.impactAsync(done ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
     if (!wasDone && done) toast.show('Completada', 'success');
     if (wasDone) toast.show('Completado deshecho', 'info');
+    const [list, comps] = await Promise.all([
+      db.getTasks(sqlite),
+      db.getCompletionsSetForDate(sqlite, date),
+    ]);
+    setTasks(list);
+    setCompleted(comps);
+  }
+
+  async function move(task: Task, direction: 'up' | 'down') {
+    const group =
+      task.parentId == null
+        ? tree
+        : childrenOf.get(task.parentId) ?? [];
+    const idx = group.findIndex((t) => t.id === task.id);
+    const other = group[idx + (direction === 'up' ? -1 : 1)];
+    if (!other || idx < 0) return;
+    await db.moveTask(sqlite, task.id, other.id);
     const [list, comps] = await Promise.all([
       db.getTasks(sqlite),
       db.getCompletionsSetForDate(sqlite, today),
@@ -117,6 +136,11 @@ export default function TaskTypeScreen() {
     const showChildren = expanded.has(task.id);
     const state = statusForDate(task, completed, today);
     const isDone = state === 'completed';
+    const group =
+      task.parentId == null ? tree : childrenOf.get(task.parentId) ?? [];
+    const idx = group.findIndex((t) => t.id === task.id);
+    const canMoveUp = idx > 0;
+    const canMoveDown = idx >= 0 && idx < group.length - 1;
     return (
       <View key={task.id}>
         <TaskRow
@@ -137,6 +161,10 @@ export default function TaskTypeScreen() {
           }
           onCheck={() => toggle(task)}
           onPress={() => router.push(`/task/${task.id}`)}
+          onMoveUp={() => move(task, 'up')}
+          onMoveDown={() => move(task, 'down')}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
         />
         {showChildren && (
           <SubtaskGroup count={children.length} depth={depth}>

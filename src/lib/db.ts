@@ -32,7 +32,7 @@ export interface TaskWrite {
 }
 
 const TASK_SELECT = `
-  SELECT id, title, notes, parent_id AS parentId,
+  SELECT id, title, notes, parent_id AS parentId, sort_order AS sortOrder,
          recurrence, recurrence_days AS recurrenceDays, monthly_day AS monthlyDay,
          start_date AS startDate, end_date AS endDate, start_time AS startTime, end_time AS endTime,
          priority, status, remind_type AS remindType, remind_before_minutes AS remindBeforeMinutes,
@@ -105,8 +105,7 @@ export async function saveSettings(db: SQLiteDatabase, settings: Settings) {
 export async function getTasks(db: SQLiteDatabase): Promise<Task[]> {
   const rows = await db.getAllAsync<RawTask>(
     `${TASK_SELECT}
-     ORDER BY start_date IS NULL, start_date IS NOT NULL AND (recurrence != 'none' AND start_date > ''),
-              COALESCE(start_date, '9999'), COALESCE(end_time, '99:99'), title COLLATE NOCASE`
+     ORDER BY sort_order, title COLLATE NOCASE`
   );
   return rows.map(mapTask);
 }
@@ -127,10 +126,10 @@ export async function hasSubtasks(db: SQLiteDatabase, parentId: number): Promise
 export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<number> {
   const now = new Date().toISOString();
   const result = await db.runAsync(
-    `INSERT INTO tasks (title, notes, parent_id, recurrence, recurrence_days,
+    `INSERT INTO tasks (title, notes, parent_id, sort_order, recurrence, recurrence_days,
                         monthly_day, start_date, end_date, start_time, end_time, priority, status,
                         remind_type, remind_before_minutes, remind_at_start, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tasks), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.title,
       data.notes,
@@ -152,6 +151,31 @@ export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<numb
     ]
   );
   return result.lastInsertRowId;
+}
+
+/**
+ * Intercambia el orden manual (sort_order) de dos tareas. Así la tarea aId
+ * pasa a ocupar la posición de bId y viceversa, sin tocar el resto.
+ */
+export async function moveTask(db: SQLiteDatabase, aId: number, bId: number) {
+  const now = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    const [ra, rb] = await Promise.all([
+      db.getFirstAsync<{ sort_order: number }>('SELECT sort_order FROM tasks WHERE id = ?', aId),
+      db.getFirstAsync<{ sort_order: number }>('SELECT sort_order FROM tasks WHERE id = ?', bId),
+    ]);
+    if (!ra || !rb) return;
+    await db.runAsync('UPDATE tasks SET sort_order = ?, updated_at = ? WHERE id = ?', [
+      rb.sort_order,
+      now,
+      aId,
+    ]);
+    await db.runAsync('UPDATE tasks SET sort_order = ?, updated_at = ? WHERE id = ?', [
+      ra.sort_order,
+      now,
+      bId,
+    ]);
+  });
 }
 
 export async function updateTask(db: SQLiteDatabase, id: number, data: TaskWrite) {
@@ -321,6 +345,8 @@ export async function toggleTaskCompletion(
       while (upId != null && guard++ < 50) {
         const par = byId.get(upId);
         if (!par) break;
+        // Un padre en pausa o cancelado no debe saltar a 'completed' por cascada.
+        if (par.status === 'cancelled' || par.status === 'paused') break;
         const kids = all.filter(
           (c) =>
             c.parentId === upId &&
