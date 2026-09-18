@@ -181,6 +181,20 @@ export default function TodayScreen() {
         )}
       </Card>
 
+      <View style={styles.list}>
+        {shownTasks.length === 0 ? (
+          <Card>
+            <ThemedText style={{ color: Colors.muted, textAlign: 'center', padding: 16 }}>
+              {tab === 'general'
+                ? 'Sin tareas generales para este día. Crea una tarea general o pínchala a esta fecha desde su detalle.'
+                : 'Sin tareas para este día.'}
+            </ThemedText>
+          </Card>
+        ) : (
+          tree.map(renderNode)
+        )}
+      </View>
+
       {showQuick && (
         <View style={styles.quickCol}>
           <Pressable
@@ -219,20 +233,6 @@ export default function TodayScreen() {
           </Pressable>
         </View>
       )}
-
-      <View style={styles.list}>
-        {shownTasks.length === 0 ? (
-          <Card>
-            <ThemedText style={{ color: Colors.muted, textAlign: 'center', padding: 16 }}>
-              {tab === 'general'
-                ? 'Sin tareas generales para este día. Crea una tarea general o pínchala a esta fecha desde su detalle.'
-                : 'Sin tareas para este día.'}
-            </ThemedText>
-          </Card>
-        ) : (
-          tree.map(renderNode)
-        )}
-      </View>
     </Screen>
   );
 }
@@ -261,7 +261,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barFill: { height: 6, borderRadius: 3, backgroundColor: Colors.tint },
-  quickCol: { gap: 10 },
+  quickCol: { gap: 10, marginTop: 4 },
   quickBtn: {
     flexDirection: 'row',
     alignItems: 'center',

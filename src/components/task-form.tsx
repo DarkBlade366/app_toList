@@ -78,9 +78,7 @@ export function initialTaskFormData(
   return {
     type: initial
       ? typeFromTask(initial)
-      : presetType ?? presetDate
-        ? 'once'
-        : defaultType(parent ?? null),
+      : presetType ?? (presetDate ? 'once' : defaultType(parent ?? null)),
     title: initial?.title ?? '',
     notes: initial?.notes ?? '',
     parentId: initial?.parentId ?? parent?.id ?? null,
@@ -103,6 +101,7 @@ export function TaskForm({
   parent,
   presetDate,
   presetType,
+  initialStep = 0,
   onSubmit,
   defaults,
 }: {
@@ -111,6 +110,7 @@ export function TaskForm({
   parent?: ParentCtx | null;
   presetDate?: string | null;
   presetType?: TaskType | null;
+  initialStep?: number;
   onSubmit: (data: db.TaskWrite) => Promise<boolean>;
   defaults?: { remindType: RemindType; remindBeforeMinutes: number; remindAtStart: boolean };
 }) {
@@ -118,7 +118,7 @@ export function TaskForm({
   const [form, setForm] = useState<TaskFormData>(() =>
     initialTaskFormData(initial, parent, presetDate, presetType, defaults)
   );
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(Math.min(Math.max(initialStep, 0), 2));
   const [error, setError] = useState<string | null>(null);
 
   const isChild = parent != null;

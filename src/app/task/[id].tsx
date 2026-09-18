@@ -13,7 +13,7 @@ import { Field } from '@/components/ui/field';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
-import { groupTasksByParent, statusForDate, todayISO } from '@/lib/logic';
+import { formatDateDMY, groupTasksByParent, statusForDate, todayISO } from '@/lib/logic';
 import { syncNotifications } from '@/lib/notifications';
 
 export default function TaskModal() {
@@ -112,13 +112,40 @@ export default function TaskModal() {
   function confirmCancel() {
     const cancelAction = () => setStatus('cancelled', 'Tarea cancelada');
     if (current.status === 'cancelled') {
-      setStatus('pending', 'Tarea reactivada');
+      confirmResume();
       return;
     }
     Alert.alert('Cancelar tarea', `¿Cancelar "${current.title}"? Podrás reactivarla después desde este mismo menú.`, [
       { text: 'No', style: 'cancel' },
       { text: 'Cancelar tarea', style: 'destructive', onPress: cancelAction },
     ]);
+  }
+
+  /** Última fecha de la tarea; null si ya pasó y no debería reactivarse. */
+  function passedDate(task: Task): string | null {
+    const today = todayISO();
+    if (task.recurrence !== 'none') {
+      return task.endDate && task.endDate < today ? task.endDate : null;
+    }
+    if (task.endDate) return task.endDate < today ? task.endDate : null;
+    if (task.startDate) return task.startDate < today ? task.startDate : null;
+    return null;
+  }
+
+  function confirmResume() {
+    const passed = passedDate(current);
+    if (passed) {
+      Alert.alert(
+        'La fecha ya pasó',
+        `Esta tarea quedó atrasada (fue el ${formatDateDMY(passed)}). Para reactivarla, antes cambia su fecha.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Cambiar fecha', onPress: () => setEditing(true) },
+        ]
+      );
+      return;
+    }
+    setStatus('pending', 'Tarea reactivada');
   }
 
   function renderChild(t: Task, depth: number): ReactElement {
@@ -213,7 +240,7 @@ export default function TaskModal() {
         <ActionBtn
           icon={current.status === 'paused' ? 'play' : 'pause'}
           label={current.status === 'paused' ? 'Reanudar' : 'Pausar'}
-          onPress={() => setStatus(current.status === 'paused' ? 'pending' : 'paused', current.status === 'paused' ? 'Reanudada' : 'En pausa')}
+          onPress={() => (current.status === 'paused' ? confirmResume() : setStatus('paused', 'En pausa'))}
         />
         <ActionBtn
           icon={current.status === 'cancelled' ? 'refresh' : 'close-circle'}

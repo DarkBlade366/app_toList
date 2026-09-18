@@ -76,6 +76,7 @@ export default function NewTaskModal() {
         parent={parentCtx}
         presetDate={date ?? null}
         presetType={presetType}
+        initialStep={presetType ? 1 : 0}
         defaults={defaults ?? undefined}
         onSubmit={async (data) => {
           await db.addTask(sqlite, { ...data, parentId: parentCtx?.id ?? data.parentId ?? null });
