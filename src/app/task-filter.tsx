@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as Haptics from 'expo-haptics';
 import { ReactElement, useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
+import { useToast } from '@/components/toast';
 import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
@@ -26,6 +28,7 @@ const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
 export default function TaskFilterScreen() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
+  const toast = useToast();
   const insets = useSafeAreaInsets();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
@@ -38,6 +41,7 @@ export default function TaskFilterScreen() {
     useCallback(() => {
       let active = true;
       (async () => {
+        await db.resetRecurringDayStatuses(sqlite, today).catch(() => {});
         const [list, comps] = await Promise.all([
           db.getTasks(sqlite),
           db.getCompletionsSetForDate(sqlite, today),
@@ -75,7 +79,11 @@ export default function TaskFilterScreen() {
   const { childrenOf } = groupTasksByParent(visible);
 
   async function toggle(task: Task) {
-    await db.toggleTaskCompletion(sqlite, task.id, today);
+    const wasDone = statusForDate(task, completed, today) === 'completed';
+    const done = await db.toggleTaskCompletion(sqlite, task.id, today);
+    void Haptics.impactAsync(done ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
+    if (!wasDone && done) toast.show('Completada', 'success');
+    if (wasDone) toast.show('Completado deshecho', 'info');
     const [list, comps] = await Promise.all([
       db.getTasks(sqlite),
       db.getCompletionsSetForDate(sqlite, today),

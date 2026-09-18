@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as Haptics from 'expo-haptics';
 import { ReactElement, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
+import { useToast } from '@/components/toast';
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
@@ -30,6 +32,7 @@ type HoyTab = 'day' | 'general';
 export default function TodayScreen() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
+  const toast = useToast();
   const [date, setDate] = useState(todayISO());
   const [tab, setTab] = useState<HoyTab>('day');
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -40,6 +43,7 @@ export default function TodayScreen() {
     useCallback(() => {
       let active = true;
       (async () => {
+        await db.resetRecurringDayStatuses(sqlite, todayISO()).catch(() => {});
         const [all, comps] = await Promise.all([
           db.getTasks(sqlite),
           db.getCompletionsSetForDate(sqlite, date),
@@ -92,7 +96,11 @@ export default function TodayScreen() {
   const ratio = shownTasks.length ? doneCount / shownTasks.length : 0;
 
   async function toggle(task: Task) {
-    await db.toggleTaskCompletion(sqlite, task.id, date);
+    const wasDone = statusForDate(task, completed, date) === 'completed';
+    const done = await db.toggleTaskCompletion(sqlite, task.id, date);
+    void Haptics.impactAsync(done ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
+    if (!wasDone && done) toast.show('Completada', 'success');
+    if (wasDone) toast.show('Completado deshecho', 'info');
     const [all, comps] = await Promise.all([
       db.getTasks(sqlite),
       db.getCompletionsSetForDate(sqlite, date),

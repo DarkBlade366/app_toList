@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
+import * as Haptics from 'expo-haptics';
 import { ReactElement, useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,9 +81,11 @@ export default function TaskModal() {
   }
 
   async function toggleToday() {
+    const wasDone = state === 'completed';
     await db.toggleTaskCompletion(sqlite, current.id, today);
+    void Haptics.impactAsync(!wasDone ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
     void syncNotifications(sqlite);
-    toast.show(state === 'completed' ? 'Deshecho' : '¡Bien hecho!', 'success');
+    toast.show(wasDone ? 'Deshecho' : '¡Bien hecho!', 'success');
     await refresh();
   }
 

@@ -139,12 +139,12 @@ export function isRecurring(task: Pick<Task, 'recurrence'>): boolean {
  * completados de ese día. Los estados globales (cancelada/pausada) mandan siempre.
  */
 export function statusForDate(
-  task: Pick<Task, 'status' | 'recurrence'>,
+  task: Pick<Task, 'id' | 'status' | 'recurrence'>,
   completedDates: ReadonlySet<string>,
   iso: string
 ): Task['status'] {
   if (task.status === 'cancelled' || task.status === 'paused') return task.status;
-  if (completedDates.has(iso)) return 'completed';
+  if (completedDates.has(String(task.id))) return 'completed';
   if (isRecurring(task)) {
     return task.status === 'in_progress' ? 'in_progress' : 'pending';
   }
@@ -152,8 +152,12 @@ export function statusForDate(
 }
 
 /** ¿Está vencida la instancia de la tarea en la fecha dada (al momento de consultar)? */
-export function isOverdue(task: Task, iso: string, completedDates: ReadonlySet<string>): boolean {
-  if (completedDates.has(iso)) return false;
+export function isOverdue(
+  task: Task,
+  iso: string,
+  completedDates: ReadonlySet<string>
+): boolean {
+  if (completedDates.has(String(task.id))) return false;
   if (task.status === 'cancelled' || task.status === 'paused') return false;
   const today = todayISO();
   if (iso < today) return true;

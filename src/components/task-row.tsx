@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo } from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
@@ -70,6 +71,21 @@ export function TaskRow({
   const accent = overdue && !checked ? Colors.danger : PRIORITY_COLORS[task.priority];
   const muted = checked || cancelled;
 
+  const scale = useMemo(() => new Animated.Value(1), []);
+  useEffect(() => {
+    if (checked) {
+      scale.setValue(0.6);
+      Animated.spring(scale, {
+        toValue: 1,
+        friction: 4,
+        tension: 160,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      scale.setValue(1);
+    }
+  }, [checked, scale]);
+
   return (
     <View style={[styles.row, { paddingLeft: 12 + depth * 22 }]}>
       {hasChildren && <View style={[styles.childBar, { backgroundColor: accent }]} />}
@@ -77,6 +93,9 @@ export function TaskRow({
         onPress={onCheck}
         disabled={!onCheck}
         hitSlop={10}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: !!checked }}
+        accessibilityLabel={checked ? `Desmarcar ${task.title}` : `Completar ${task.title}`}
         style={[
           styles.check,
           {
@@ -85,7 +104,9 @@ export function TaskRow({
           },
         ]}>
         {checked ? (
-          <Ionicons name="checkmark" size={15} color={Colors.white} />
+          <Animated.View style={{ transform: [{ scale }] }}>
+            <Ionicons name="checkmark" size={15} color={Colors.white} />
+          </Animated.View>
         ) : cancelled ? (
           <Ionicons name="close" size={15} color={Colors.muted} />
         ) : null}

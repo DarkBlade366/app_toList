@@ -155,7 +155,7 @@ export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<numb
 
 export async function updateTask(db: SQLiteDatabase, id: number, data: TaskWrite) {
   await db.runAsync(
-    `UPDATE tasks SET title = ?, notes = ?, recurrence = ?, recurrence_days = ?,
+    `UPDATE tasks SET title = ?, notes = ?, parent_id = ?, recurrence = ?, recurrence_days = ?,
                       monthly_day = ?, start_date = ?, end_date = ?, start_time = ?, end_time = ?,
                       priority = ?, status = ?, remind_type = ?, remind_before_minutes = ?,
                       remind_at_start = ?, updated_at = ?
@@ -163,6 +163,7 @@ export async function updateTask(db: SQLiteDatabase, id: number, data: TaskWrite
     [
       data.title,
       data.notes,
+      data.parentId ?? null,
       data.recurrence,
       data.recurrenceDays ? JSON.stringify(data.recurrenceDays) : null,
       data.monthlyDay,
