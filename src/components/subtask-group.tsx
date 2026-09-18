@@ -44,17 +44,16 @@ export function SubtaskGroup({
 
 const styles = StyleSheet.create({
   group: {
-    marginLeft: 10,
+    marginLeft: 0,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: TINT_ALPHA,
     backgroundColor: TINT_BG,
     paddingVertical: 6,
-    paddingHorizontal: 4,
     marginBottom: 4,
   },
   groupNested: {
-    marginLeft: 6,
+    marginLeft: 12,
     paddingVertical: 4,
   },
   head: {

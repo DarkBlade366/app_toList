@@ -121,7 +121,6 @@ export default function TaskTypeScreen() {
       <View key={task.id}>
         <TaskRow
           task={task}
-          depth={depth}
           checked={isDone}
           paused={state === 'paused'}
           cancelled={state === 'cancelled'}

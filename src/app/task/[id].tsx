@@ -160,7 +160,6 @@ export default function TaskModal() {
       <View key={t.id}>
         <TaskRow
           task={t}
-          depth={depth}
           checked={childState === 'completed'}
           paused={childState === 'paused'}
           cancelled={childState === 'cancelled'}

@@ -46,7 +46,6 @@ export function TaskRow({
   overdue,
   paused,
   cancelled,
-  depth = 0,
   hasChildren,
   childCount,
   expanded,
@@ -61,7 +60,6 @@ export function TaskRow({
   overdue?: boolean;
   paused?: boolean;
   cancelled?: boolean;
-  depth?: number;
   hasChildren?: boolean;
   childCount?: number;
   expanded?: boolean;
@@ -89,8 +87,8 @@ export function TaskRow({
   }, [checked, scale]);
 
   return (
-    <View style={[styles.row, { paddingLeft: 12 + depth * 16 }]}>
-      {hasChildren && <View style={[styles.childBar, { backgroundColor: accent }]} />}
+    <View style={styles.row}>
+      <View style={[styles.accentBar, { backgroundColor: accent }]} />
       <Pressable
         onPress={onCheck}
         disabled={!onCheck}
@@ -157,14 +155,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: 12,
+    paddingLeft: 12,
     paddingRight: 12,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
-  childBar: {
+  accentBar: {
     position: 'absolute',
-    left: 0,
+    left: 4,
     top: 8,
     bottom: 8,
     width: 3,

@@ -122,7 +122,6 @@ export default function TaskFilterScreen() {
           checked={state === 'completed'}
           paused={state === 'paused'}
           cancelled={state === 'cancelled'}
-          depth={depth}
           hasChildren={children.length > 0}
           childCount={children.length}
           expanded={showChildren}

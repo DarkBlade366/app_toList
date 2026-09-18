@@ -142,7 +142,6 @@ export default function TodayScreen() {
           overdue={isOverdue(task, date, completed)}
           paused={state === 'paused'}
           cancelled={state === 'cancelled'}
-          depth={depth}
           hasChildren={children.length > 0}
           childCount={children.length}
           expanded={showChildren}
