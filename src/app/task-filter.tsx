@@ -11,7 +11,7 @@ import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
-import { buildTree, groupTasksByParent, sortByPriority } from '@/lib/logic';
+import { buildTree, groupTasksByParent, sortByPriority, statusForDate, todayISO } from '@/lib/logic';
 
 type StatusFilter = 'all' | 'pending' | 'completed' | 'paused' | 'cancelled';
 
@@ -28,19 +28,28 @@ export default function TaskFilterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<StatusFilter>('pending');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const today = todayISO();
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      db.getTasks(sqlite).then((list) => {
-        if (active) setTasks(list);
-      });
+      (async () => {
+        const [list, comps] = await Promise.all([
+          db.getTasks(sqlite),
+          db.getCompletionsSetForDate(sqlite, today),
+        ]);
+        if (!active) return;
+        setTasks(list);
+        setCompleted(comps);
+      })();
       return () => {
         active = false;
       };
-    }, [sqlite])
+    }, [sqlite, today])
   );
 
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -64,10 +73,21 @@ export default function TaskFilterScreen() {
   const tree = buildTree(visible);
   const { childrenOf } = groupTasksByParent(visible);
 
+  async function toggle(task: Task) {
+    await db.toggleTaskCompletion(sqlite, task.id, today);
+    const [list, comps] = await Promise.all([
+      db.getTasks(sqlite),
+      db.getCompletionsSetForDate(sqlite, today),
+    ]);
+    setTasks(list);
+    setCompleted(comps);
+  }
+
   function renderNode(task: Task): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const showChildren = expanded.has(task.id);
     const parent = task.parentId != null ? byId.get(task.parentId) : undefined;
+    const state = statusForDate(task, completed, today);
     const meta: string[] = [];
     if (parent) meta.push(`hija de "${parent.title}"`);
     if (children.length > 0) meta.push(`${children.length} tarea${children.length > 1 ? 's' : ''} dentro`);
@@ -77,9 +97,9 @@ export default function TaskFilterScreen() {
       <View key={task.id}>
         <TaskRow
           task={task}
-          checked={task.status === 'completed'}
-          paused={task.status === 'paused'}
-          cancelled={task.status === 'cancelled'}
+          checked={state === 'completed'}
+          paused={state === 'paused'}
+          cancelled={state === 'cancelled'}
           depth={0}
           hasChildren={children.length > 0}
           expanded={showChildren}
@@ -91,6 +111,7 @@ export default function TaskFilterScreen() {
               return next;
             })
           }
+          onCheck={() => toggle(task)}
           onPress={() => router.push(`/task/${task.id}`)}
           extraMeta={extraMeta}
         />

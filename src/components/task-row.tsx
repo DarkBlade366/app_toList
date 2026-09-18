@@ -95,7 +95,8 @@ export function TaskRow({
         <ThemedText
           style={[
             styles.title,
-            muted && { color: Colors.muted, textDecorationLine: muted ? 'line-through' : undefined },
+            checked && { color: Colors.success, textDecorationLine: 'line-through' },
+            cancelled && { color: Colors.muted, textDecorationLine: 'line-through' },
             paused && !muted && { color: Colors.warning },
           ]}
           numberOfLines={2}>

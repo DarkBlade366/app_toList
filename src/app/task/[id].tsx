@@ -209,7 +209,7 @@ export default function TaskModal() {
       </View>
 
       <View style={styles.actions}>
-        <ActionBtn icon="checkmark-circle" label="Completar" onPress={toggleToday} active={state === 'completed'} />
+        <ActionBtn icon="checkmark-circle" label="Completar" color={Colors.success} filled={state === 'completed'} onPress={toggleToday} active={state === 'completed'} />
         <ActionBtn
           icon={current.status === 'paused' ? 'play' : 'pause'}
           label={current.status === 'paused' ? 'Reanudar' : 'Pausar'}
@@ -252,18 +252,24 @@ function ActionBtn({
   onPress,
   active,
   danger,
+  color,
+  filled,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   active?: boolean;
   danger?: boolean;
+  color?: string;
+  filled?: boolean;
 }) {
-  const color = danger ? Colors.danger : active ? Colors.success : Colors.text;
+  const accent = color ?? (danger ? Colors.danger : active ? Colors.success : Colors.text);
+  const bg = filled ? accent : 'transparent';
+  const fg = filled ? Colors.white : accent;
   return (
-    <Pressable style={[styles.action, { borderColor: color }]} onPress={onPress}>
-      <Ionicons name={icon} size={18} color={color} />
-      <ThemedText style={{ color, fontWeight: '700', fontSize: 12 }}>{label}</ThemedText>
+    <Pressable style={[styles.action, { borderColor: accent, backgroundColor: bg }]} onPress={onPress}>
+      <Ionicons name={icon} size={18} color={fg} />
+      <ThemedText style={{ color: fg, fontWeight: '700', fontSize: 12 }}>{label}</ThemedText>
     </Pressable>
   );
 }

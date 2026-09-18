@@ -16,7 +16,7 @@ import {
   TaskType,
   buildTree,
   groupTasksByParent,
-  isRecurring,
+  statusForDate,
   taskTypeOf,
   todayISO,
 } from '@/lib/logic';
@@ -39,22 +39,29 @@ export default function TaskTypeScreen() {
   const taskType = (TASK_TYPE_LABELS[type as TaskType] ? type : 'general') as TaskType;
 
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>('all');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const today = todayISO();
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      db.getTasks(sqlite).then((list) => {
-        if (active) setTasks(list);
-      });
+      (async () => {
+        const [list, comps] = await Promise.all([
+          db.getTasks(sqlite),
+          db.getCompletionsSetForDate(sqlite, today),
+        ]);
+        if (!active) return;
+        setTasks(list);
+        setCompleted(comps);
+      })();
       return () => {
         active = false;
       };
-    }, [sqlite])
+    }, [sqlite, today])
   );
-
-  const today = todayISO();
 
   function applyFilter(t: Task): boolean {
     switch (filter) {
@@ -77,21 +84,27 @@ export default function TaskTypeScreen() {
 
   async function toggle(task: Task) {
     await db.toggleTaskCompletion(sqlite, task.id, today);
-    setTasks(await db.getTasks(sqlite));
+    const [list, comps] = await Promise.all([
+      db.getTasks(sqlite),
+      db.getCompletionsSetForDate(sqlite, today),
+    ]);
+    setTasks(list);
+    setCompleted(comps);
   }
 
   function renderNode(task: Task): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const showChildren = expanded.has(task.id);
-    const isDone = task.status === 'completed';
+    const state = statusForDate(task, completed, today);
+    const isDone = state === 'completed';
     return (
       <View key={task.id}>
         <TaskRow
           task={task}
           depth={0}
           checked={isDone}
-          paused={task.status === 'paused'}
-          cancelled={task.status === 'cancelled'}
+          paused={state === 'paused'}
+          cancelled={state === 'cancelled'}
           hasChildren={children.length > 0}
           expanded={showChildren}
           onToggleExpand={() =>
@@ -102,7 +115,7 @@ export default function TaskTypeScreen() {
               return next;
             })
           }
-          onCheck={() => (isRecurring(task) ? toggle(task) : undefined)}
+          onCheck={() => toggle(task)}
           onPress={() => router.push(`/task/${task.id}`)}
         />
         {showChildren && children.map(renderNode)}
