@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { occursOnDate } from './logic';
 import { Priority, Recurrence, RemindType, Settings, Task, TaskCompletion, TaskStatus } from './schema';
 
 export type {
@@ -213,6 +214,12 @@ export async function deleteTask(db: SQLiteDatabase, id: number) {
 /**
  * Marca la tarea como completada en una fecha (una sola ocurrencia) o la desmarca.
  * Para recurrentes, registra el completado del día; para puntuales, marca/desmarca globalmente.
+ *
+ * Reglas de cascada:
+ *  - Completar un padre completa también toda su rama (hijos, nietos, …) ese día.
+ *  - Desmarcar cualquier tarea desmarca también sus ancestros (hasta la raíz).
+ *  - Desmarcar una tarea desmarca además toda su propia rama (se revierte lo que
+ *    se completó en bloque desde ella).
  */
 export async function toggleTaskCompletion(
   db: SQLiteDatabase,
@@ -228,19 +235,77 @@ export async function toggleTaskCompletion(
     date
   );
 
-  if (existing) {
-    await db.runAsync('DELETE FROM task_completions WHERE task_id = ? AND date = ?', id, date);
-    await setTaskStatus(db, id, 'pending', null);
-    return false;
+  const now = new Date().toISOString();
+  const all = await getTasks(db);
+
+  const subtree: number[] = [];
+  const queue = [id];
+  while (queue.length > 0) {
+    const pid = queue.pop()!;
+    for (const t of all) {
+      if (t.parentId === pid) {
+        subtree.push(t.id);
+        queue.push(t.id);
+      }
+    }
   }
 
-  await db.runAsync('INSERT INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)', [
-    id,
-    date,
-    new Date().toISOString(),
-  ]);
-  await setTaskStatus(db, id, 'completed', new Date().toISOString());
-  return true;
+  await db.withTransactionAsync(async () => {
+    if (existing) {
+      const remove = [id, ...subtree];
+      const ancestors: number[] = [];
+      let cur = task.parentId;
+      while (cur != null) {
+        ancestors.push(cur);
+        cur = all.find((t) => t.id === cur)?.parentId ?? null;
+      }
+      const maybe = [...new Set([...remove, ...ancestors])];
+
+      const rows = await db.getAllAsync<{ task_id: number }>(
+        `SELECT task_id FROM task_completions
+         WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
+        [...maybe, date]
+      );
+      const affected = rows.map((r) => r.task_id);
+
+      await db.runAsync(
+        `DELETE FROM task_completions
+         WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
+        [...maybe, date]
+      );
+
+      if (affected.length > 0) {
+        await db.runAsync(
+          `UPDATE tasks
+           SET status = CASE WHEN status = 'completed' THEN 'pending' ELSE status END,
+               completed_at = NULL, updated_at = ?
+           WHERE id IN (${affected.map(() => '?').join(',')})`,
+          [now, ...affected]
+        );
+      }
+    } else {
+      const ids = [id];
+      for (const tid of subtree) {
+        const child = all.find((t) => t.id === tid);
+        if (!child || !occursOnDate(child, date)) continue;
+        if (child.status === 'cancelled' || child.status === 'paused') continue;
+        ids.push(tid);
+      }
+      for (const tid of ids) {
+        await db.runAsync(
+          'INSERT INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
+          [tid, date, now]
+        );
+      }
+      await db.runAsync(
+        `UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ?
+         WHERE id IN (${ids.map(() => '?').join(',')})`,
+        [now, now, ...ids]
+      );
+    }
+  });
+
+  return !existing;
 }
 
 export async function getCompletionsForDate(db: SQLiteDatabase, date: string): Promise<string[]> {

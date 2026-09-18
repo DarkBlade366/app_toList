@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
-import { addDays, formatDateDMY, parseDateDMY, todayISO } from '@/lib/logic';
+import { addDays, formatDateDMY, formatDateShort, parseDateDMY, todayISO } from '@/lib/logic';
 
 /** Inserta las barras de DD/MM/AAAA a partir de solo dígitos (no se pueden borrar). */
 function maskDate(digits: string): string {
@@ -19,11 +19,13 @@ export function DateField({
   value,
   onChange,
   hints = [0, 1, 7],
+  hintDates,
 }: {
   label: string;
   value: string | null;
   onChange: (iso: string | null) => void;
   hints?: number[];
+  hintDates?: string[];
 }) {
   const [text, setText] = useState(value ? formatDateDMY(value) : '');
 
@@ -42,6 +44,10 @@ export function DateField({
   const chipLabels = (d: number) =>
     d === 0 ? 'Hoy' : d === 1 ? 'Mañana' : d === 7 ? '+7 días' : `+${d} días`;
 
+  const chips = hintDates
+    ? hintDates.map((iso) => ({ iso, label: iso === todayISO() ? 'Hoy' : formatDateShort(iso) }))
+    : hints.map((d) => ({ iso: addDays(todayISO(), d), label: chipLabels(d) }));
+
   return (
     <View style={styles.wrap}>
       <ThemedText style={styles.label}>{label}</ThemedText>
@@ -54,22 +60,23 @@ export function DateField({
         value={text}
         onChangeText={handleChange}
       />
-      <View style={styles.chips}>
-        {hints.map((d) => {
-          const target = addDays(todayISO(), d);
-          const active = value === target;
-          return (
-            <Pressable
-              key={d}
-              style={[styles.chip, active && { borderColor: Colors.tint }]}
-              onPress={() => pick(target)}>
-              <ThemedText style={[styles.chipText, active && { color: Colors.tint }]}>
-                {chipLabels(d)}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
+      {chips.length > 0 && (
+        <View style={styles.chips}>
+          {chips.map(({ iso, label }) => {
+            const active = value === iso;
+            return (
+              <Pressable
+                key={iso}
+                style={[styles.chip, active && { borderColor: Colors.tint }]}
+                onPress={() => pick(iso)}>
+                <ThemedText style={[styles.chipText, active && { color: Colors.tint }]}>
+                  {label}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }

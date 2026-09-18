@@ -126,6 +126,15 @@ export function TaskForm({
     ? TYPE_OPTIONS.filter((o) => o.key !== 'general')
     : TYPE_OPTIONS;
 
+  const parentWindow = parent
+    ? [
+        parent.startDate ? `desde ${formatDateDMY(parent.startDate)}` : null,
+        parent.endDate ? `hasta ${formatDateDMY(parent.endDate)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+
   function set(patch: Partial<TaskFormData>) {
     setForm((f) => ({ ...f, ...patch }));
     setError(null);
@@ -172,13 +181,19 @@ export function TaskForm({
     if (form.startTime && form.endTime && form.endTime < form.startTime) {
       return 'La hora de fin no puede ser anterior a la de inicio.';
     }
-    if (isChild) {
-      const effectiveEnd = form.type === 'once' ? form.startDate : form.endDate;
-      if (parent && parent.endDate && effectiveEnd && effectiveEnd > parent.endDate) {
-        return `No puede terminar después de la tarea de origen (hasta ${formatDateDMY(parent.endDate)}).`;
-      }
-      if (parent && parent.startDate && form.startDate && form.startDate < parent.startDate) {
+    if (isChild && parent) {
+      const effStart = form.startDate;
+      const effEnd = form.type === 'once' ? form.startDate : form.endDate;
+      if (parent.startDate && effStart && effStart < parent.startDate) {
         return `No puede empezar antes que la tarea de origen (desde ${formatDateDMY(parent.startDate)}).`;
+      }
+      if (parent.endDate) {
+        if (effStart && effStart > parent.endDate) {
+          return `No puede empezar después de la tarea de origen (hasta ${formatDateDMY(parent.endDate)}).`;
+        }
+        if (effEnd && effEnd > parent.endDate) {
+          return `No puede terminar después de la tarea de origen (hasta ${formatDateDMY(parent.endDate)}).`;
+        }
       }
     }
     return null;
@@ -243,7 +258,9 @@ export function TaskForm({
           <View style={styles.parentBanner}>
             <Ionicons name="git-merge-outline" size={16} color={Colors.tint} />
             <ThemedText style={styles.parentBannerText}>
-              Esta tarea se añade dentro de «{parent.title}». Una tarea general nunca puede formar parte de otra.
+              Esta tarea se añade dentro de «{parent.title}»{parentWindow ? ` (${parentWindow})` : ''}.
+              Una tarea general nunca puede formar parte de otra y las fechas deben caber dentro de
+              esa tarea.
             </ThemedText>
           </View>
         ) : null}
@@ -370,9 +387,36 @@ function ScheduleStep({
   set: (patch: Partial<TaskFormData>) => void;
   wantsEndDate: boolean;
 }) {
+  const hintDates = parent
+    ? (() => {
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const iso of [todayISO(), parent.startDate, parent.endDate]) {
+          if (!iso || seen.has(iso)) continue;
+          if (parent.startDate && iso < parent.startDate) continue;
+          if (parent.endDate && iso > parent.endDate) continue;
+          seen.add(iso);
+          out.push(iso);
+        }
+        return out;
+      })()
+    : undefined;
+
   return (
     <View style={styles.step}>
       <StepTitle title="Cuándo" subtitle="Define las fechas y el margen de tiempo." allowBack />
+
+      {parent ? (
+        <View style={styles.rangeBox}>
+          <Ionicons name="information-circle-outline" size={16} color={Colors.tint} />
+          <ThemedText style={styles.rangeBoxText}>
+            Dentro de «{parent.title}»:
+            {parent.startDate ? ` desde ${formatDateDMY(parent.startDate)}` : ' sin inicio fijo'}
+            {parent.endDate ? ` y hasta ${formatDateDMY(parent.endDate)}` : ' y sin fecha de fin'}
+            . Esta sub-tarea no puede salirse de ese rango.
+          </ThemedText>
+        </View>
+      ) : null}
 
       {form.type === 'general' ? (
         <Field label="Fecha límite (opcional) / sin fecha límite">
@@ -384,25 +428,25 @@ function ScheduleStep({
             onDisable={() => set({ endDate: null })}
           />
           {form.endDate != null ? (
-            <DateField label="" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[0, 1, 7]} />
+            <DateField label="" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[0, 1, 7]} hintDates={hintDates} />
           ) : null}
         </Field>
       ) : null}
 
       {form.type === 'once' ? (
-        <DateField label="Día" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} />
+        <DateField label="Día" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} hintDates={hintDates} />
       ) : null}
 
       {form.type === 'range' ? (
         <>
-          <DateField label="Desde" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} />
-          <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[1, 7, 30]} />
+          <DateField label="Desde" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} hintDates={hintDates} />
+          <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[1, 7, 30]} hintDates={hintDates} />
         </>
       ) : null}
 
       {form.type === 'daily' ? (
         <>
-          <DateField label="Empieza (desde)" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} />
+          <DateField label="Empieza (desde)" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} hintDates={hintDates} />
           <ToggleSet
             on={form.endDate != null}
             onLabel="Con fecha de fin"
@@ -411,7 +455,7 @@ function ScheduleStep({
             onDisable={() => set({ endDate: null })}
           />
           {form.endDate != null ? (
-            <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[7, 30]} />
+            <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[7, 30]} hintDates={hintDates} />
           ) : null}
         </>
       ) : null}
@@ -441,7 +485,7 @@ function ScheduleStep({
               })}
             </View>
           </Field>
-          <DateField label="Empieza (desde)" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} />
+          <DateField label="Empieza (desde)" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} hintDates={hintDates} />
           <ToggleSet
             on={form.endDate != null}
             onLabel="Con fecha de fin"
@@ -450,7 +494,7 @@ function ScheduleStep({
             onDisable={() => set({ endDate: null })}
           />
           {form.endDate != null ? (
-            <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[7, 30]} />
+            <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[7, 30]} hintDates={hintDates} />
           ) : null}
         </>
       ) : null}
@@ -471,7 +515,7 @@ function ScheduleStep({
               }}
             />
           </Field>
-          <DateField label="Empieza (desde)" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} />
+          <DateField label="Empieza (desde)" value={form.startDate} onChange={(d) => set({ startDate: d })} hints={[0, 1, 7]} hintDates={hintDates} />
           <ToggleSet
             on={form.endDate != null}
             onLabel="Con fecha de fin"
@@ -480,7 +524,7 @@ function ScheduleStep({
             onDisable={() => set({ endDate: null })}
           />
           {form.endDate != null ? (
-            <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[7, 30]} />
+            <DateField label="Hasta" value={form.endDate} onChange={(d) => set({ endDate: d })} hints={[7, 30]} hintDates={hintDates} />
           ) : null}
         </>
       ) : null}
@@ -543,6 +587,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34, 211, 238, 0.08)',
   },
   parentBannerText: { flex: 1, color: Colors.text, fontSize: 13, lineHeight: 18 },
+  rangeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.35)',
+    backgroundColor: 'rgba(34, 211, 238, 0.06)',
+  },
+  rangeBoxText: { flex: 1, fontSize: 13, color: Colors.text, lineHeight: 18 },
   step: { gap: 16 },
   stepHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepTitle: { fontSize: 22, fontWeight: '800', color: Colors.text, letterSpacing: -0.3 },
