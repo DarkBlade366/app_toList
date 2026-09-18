@@ -9,21 +9,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import {
-  PanResponder,
-  Platform,
-  StyleSheet,
-  UIManager,
-  View,
-  ViewProps,
-  ViewStyle,
-} from 'react-native';
+import { PanResponder, StyleSheet, View, ViewProps, ViewStyle } from 'react-native';
 
 import { Colors } from '@/constants/theme';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 /**
  * Lista plana de nodos en el orden exacto en que se dibujan
@@ -80,6 +68,8 @@ interface DragUI {
 interface ReorderValue {
   rowRef: (id: number) => (el: View | null) => void;
   handleProps: (id: number) => ViewProps;
+  offsetFor: (id: number) => number;
+  draggingId: number | null;
 }
 
 const ReorderCtx = createContext<ReorderValue | null>(null);
@@ -101,8 +91,9 @@ export function DragGrip({ id }: { id: number }) {
 }
 
 /**
- * Ancla el bloque de una fila (fila + sub-árbol) para que el provider pueda
- * medirlo y arrastrarlo entero. Se coloca como contenedor de cada nodo de la lista.
+ * Ancla el bloque de una fila (fila + sub-árbol). Durante un arrastre la fila
+ * activa se oculta (la dibuja el fantasma) y las demás se desplazan en vivo con
+ * translateY para abrir el hueco donde se soltará la tarea.
  */
 export function RowAnchor({
   id,
@@ -110,8 +101,17 @@ export function RowAnchor({
   style,
 }: PropsWithChildren<{ id: number; style?: ViewStyle }>) {
   const reorder = useReorder('RowAnchor');
+  const offset = reorder.offsetFor(id);
+  const hidden = reorder.draggingId === id;
   return (
-    <View ref={reorder.rowRef(id)} style={style}>
+    <View
+      ref={reorder.rowRef(id)}
+      collapsable={false}
+      style={[
+        style,
+        hidden && styles.hidden,
+        offset !== 0 && { transform: [{ translateY: offset }] },
+      ]}>
       {children}
     </View>
   );
@@ -141,6 +141,8 @@ export function ReorderProvider({
   });
 
   const [ui, setUi] = useState<DragUI | null>(null);
+  const [offsets, setOffsets] = useState<ReadonlyMap<number, number>>(new Map());
+  const [draggingId, setDraggingId] = useState<number | null>(null);
 
   const rowRef = useCallback((id: number) => (el: View | null) => {
     if (el) views.current.set(id, el);
@@ -195,7 +197,7 @@ export function ReorderProvider({
       const ipos = sibs.findIndex((r) => r.id === s.id);
       if (ipos === -1) return null;
       const others = sibs.filter((r) => r.id !== s.id);
-      const p = Math.max(0, Math.min(insertAt <= ipos ? insertAt : insertAt - 1, others.length));
+      const p = Math.max(0, Math.min(insertAt, others.length));
       const beforeVis = p === 0 ? null : others[p - 1].id;
       const afterVis = p === others.length ? null : others[p].id;
 
@@ -222,6 +224,50 @@ export function ReorderProvider({
       return same ? null : fullWithout;
     },
     [rows, siblingsOf]
+  );
+
+  /**
+   * Calcula los desplazamientos verticales (translateY) de las filas hermanas y
+   * la posición del hueco donde quedará la tarea si se suelta en este instante.
+   *
+   * Solo se desplazan los bloques hermanos (cada uno con su sub-árbol colgado),
+   * desde la base del grupo hasta su nueva posición acumulada. Las filas ajenas
+   * al grupo no se mueven; los descendientes viajan dentro de su hermano.
+   */
+  const buildOffsets = useCallback(
+    (s: DragSession, insertAt: number): { offsets: Map<number, number>; gapY: number | null } => {
+      const offsets = new Map<number, number>();
+      const newSibOrder = buildOrder(s, insertAt);
+      if (!newSibOrder) return { offsets, gapY: null };
+
+      const sibs = rows.filter((r) => r.parentId === s.parentId);
+      const sibSet = new Set(sibs.map((r) => r.id));
+      const visibleOrder = newSibOrder.filter((id) => sibSet.has(id));
+
+      const firstSib = sibs[0];
+      const firstRect = firstSib
+        ? s.rects.get(firstSib.id) ?? (firstSib.id === s.id ? s : undefined)
+        : undefined;
+      if (!firstRect) return { offsets, gapY: null };
+      const base = firstRect.y;
+
+      let acc = 0;
+      let gapY: number | null = null;
+      for (const id of visibleOrder) {
+        const rec = s.rects.get(id) ?? (id === s.id ? s : undefined);
+        if (!rec) continue;
+        if (id === s.id) {
+          gapY = base + acc;
+        } else {
+          const target = base + acc;
+          const shift = target - rec.y;
+          if (Math.abs(shift) > 0.5) offsets.set(id, shift);
+        }
+        acc += rec.height;
+      }
+      return { offsets, gapY };
+    },
+    [rows, buildOrder]
   );
 
   const responder = useMemo(
@@ -254,20 +300,16 @@ export function ReorderProvider({
               rects: measureRows(id),
             };
             session.current = s;
+            setDraggingId(id);
             onDragStateChange?.(true);
           }
           const y = s.y + g.dy;
-          const center = Math.min(
-            // evita salirse del rango del bloque arrastrado (por si arrastras fuera de la lista)
-            s.rects.size > 0 ? 1e9 : 1e9,
-            y + s.height / 2
-          );
+          const center = y + s.height / 2;
+
           const sibs = rows.filter((r) => r.parentId === s.parentId);
           const blocks = sibs
-            .map((r) => s.rects.get(r.id))
+            .map((r) => s.rects.get(r.id) ?? (r.id === s.id ? s : undefined))
             .filter((b): b is Rect => !!b);
-          let indicatorY: number | null = null;
-          let canDrop = false;
           if (blocks.length === sibs.length && blocks.length > 1) {
             const firstTop = blocks[0].y;
             const lastBottom = blocks[blocks.length - 1].y + blocks[blocks.length - 1].height;
@@ -279,27 +321,32 @@ export function ReorderProvider({
             let insertAt = 0;
             while (insertAt < mids.length && mids[insertAt] < c) insertAt++;
             const ipos = sibs.findIndex((r) => r.id === s.id);
-            canDrop = insertAt !== ipos;
-            if (canDrop) {
-              indicatorY =
-                insertAt === 0
-                  ? firstTop - 8
-                  : insertAt === sibs.length
-                    ? lastBottom + 8
-                    : mids[insertAt - 1];
-            }
+            const canDrop = insertAt !== ipos;
             slot.current = { insertAt, canDrop };
+
+            const { offsets: nextOffsets, gapY } = buildOffsets(s, insertAt);
+            setOffsets(nextOffsets);
+
+            setUi({
+              id,
+              x: s.x,
+              y,
+              width: s.width,
+              height: s.height,
+              indicatorY: gapY,
+            });
           } else {
             slot.current = { insertAt: 0, canDrop: false };
+            setOffsets(new Map());
+            setUi({
+              id,
+              x: s.x,
+              y,
+              width: s.width,
+              height: s.height,
+              indicatorY: null,
+            });
           }
-          setUi({
-            id,
-            x: s.x,
-            y,
-            width: s.width,
-            height: s.height,
-            indicatorY,
-          });
         },
         onPanResponderRelease: () => {
           const s = session.current;
@@ -308,6 +355,8 @@ export function ReorderProvider({
           slot.current = { insertAt: 0, canDrop: false };
           gripId.current = null;
           setUi(null);
+          setOffsets(new Map());
+          setDraggingId(null);
           onDragStateChange?.(false);
           if (!s || !canDrop) return;
           const order = buildOrder(s, insertAt);
@@ -318,10 +367,12 @@ export function ReorderProvider({
           slot.current = { insertAt: 0, canDrop: false };
           gripId.current = null;
           setUi(null);
+          setOffsets(new Map());
+          setDraggingId(null);
           onDragStateChange?.(false);
         },
       }),
-    [rows, onReorder, measure, measureRows, buildOrder, onDragStateChange]
+    [rows, onReorder, measure, measureRows, buildOrder, buildOffsets, onDragStateChange]
   );
 
   const handleProps = useCallback(
@@ -341,7 +392,15 @@ export function ReorderProvider({
     [responder]
   );
 
-  const value = useMemo(() => ({ rowRef, handleProps }), [rowRef, handleProps]);
+  const value = useMemo(
+    () => ({
+      rowRef,
+      handleProps,
+      offsetFor: (id: number) => offsets.get(id) ?? 0,
+      draggingId,
+    }),
+    [rowRef, handleProps, offsets, draggingId]
+  );
 
   return (
     <View ref={rootRef} style={styles.container}>
@@ -374,6 +433,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 4,
   },
+  hidden: { opacity: 0 },
   ghost: {
     position: 'absolute',
     opacity: 0.96,
