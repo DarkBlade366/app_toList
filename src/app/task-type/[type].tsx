@@ -11,6 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FilterDropdown } from '@/components/ui/filter-dropdown';
+import { SubtaskGroup } from '@/components/subtask-group';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
@@ -111,7 +112,7 @@ export default function TaskTypeScreen() {
     setCompleted(comps);
   }
 
-  function renderNode(task: Task): ReactElement | null {
+  function renderNode(task: Task, depth = 0): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const showChildren = expanded.has(task.id);
     const state = statusForDate(task, completed, today);
@@ -120,11 +121,12 @@ export default function TaskTypeScreen() {
       <View key={task.id}>
         <TaskRow
           task={task}
-          depth={0}
+          depth={depth}
           checked={isDone}
           paused={state === 'paused'}
           cancelled={state === 'cancelled'}
           hasChildren={children.length > 0}
+          childCount={children.length}
           expanded={showChildren}
           onToggleExpand={() =>
             setExpanded((s) => {
@@ -137,7 +139,11 @@ export default function TaskTypeScreen() {
           onCheck={() => toggle(task)}
           onPress={() => router.push(`/task/${task.id}`)}
         />
-        {showChildren && children.map(renderNode)}
+        {showChildren && (
+          <SubtaskGroup count={children.length} depth={depth}>
+            {children.map((c) => renderNode(c, depth + 1))}
+          </SubtaskGroup>
+        )}
       </View>
     );
   }

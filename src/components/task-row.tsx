@@ -48,6 +48,7 @@ export function TaskRow({
   cancelled,
   depth = 0,
   hasChildren,
+  childCount,
   expanded,
   onToggleExpand,
   onCheck,
@@ -62,6 +63,7 @@ export function TaskRow({
   cancelled?: boolean;
   depth?: number;
   hasChildren?: boolean;
+  childCount?: number;
   expanded?: boolean;
   onToggleExpand?: () => void;
   onCheck?: () => void;
@@ -87,7 +89,7 @@ export function TaskRow({
   }, [checked, scale]);
 
   return (
-    <View style={[styles.row, { paddingLeft: 12 + depth * 22 }]}>
+    <View style={[styles.row, { paddingLeft: 12 + depth * 16 }]}>
       {hasChildren && <View style={[styles.childBar, { backgroundColor: accent }]} />}
       <Pressable
         onPress={onCheck}
@@ -131,13 +133,20 @@ export function TaskRow({
       </Pressable>
 
       {hasChildren ? (
-        <Pressable onPress={onToggleExpand} hitSlop={10}>
-          <Ionicons
-            name={expanded ? 'chevron-down' : 'chevron-forward'}
-            size={18}
-            color={Colors.muted}
-          />
-        </Pressable>
+        <View style={styles.expandWrap}>
+          {childCount != null && childCount > 0 ? (
+            <View style={styles.countChip}>
+              <ThemedText style={styles.countChipText}>{childCount}</ThemedText>
+            </View>
+          ) : null}
+          <Pressable onPress={onToggleExpand} hitSlop={10} accessibilityLabel={expanded ? 'Contraer sub-tareas' : 'Expandir sub-tareas'}>
+            <Ionicons
+              name={expanded ? 'chevron-down-circle' : 'chevron-forward-circle'}
+              size={22}
+              color={expanded ? Colors.tint : Colors.muted}
+            />
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -161,6 +170,17 @@ const styles = StyleSheet.create({
     width: 3,
     borderRadius: 2,
   },
+  expandWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  countChip: {
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(34, 211, 238, 0.14)',
+    paddingHorizontal: 5,
+  },
+  countChipText: { fontSize: 11, fontWeight: '800', color: Colors.tint },
   check: {
     width: 24,
     height: 24,

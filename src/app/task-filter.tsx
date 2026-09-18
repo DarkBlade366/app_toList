@@ -11,6 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FilterDropdown } from '@/components/ui/filter-dropdown';
+import { SubtaskGroup } from '@/components/subtask-group';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
@@ -104,7 +105,7 @@ export default function TaskFilterScreen() {
     setCompleted(comps);
   }
 
-  function renderNode(task: Task): ReactElement | null {
+  function renderNode(task: Task, depth = 0): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const showChildren = expanded.has(task.id);
     const parent = task.parentId != null ? byId.get(task.parentId) : undefined;
@@ -121,8 +122,9 @@ export default function TaskFilterScreen() {
           checked={state === 'completed'}
           paused={state === 'paused'}
           cancelled={state === 'cancelled'}
-          depth={0}
+          depth={depth}
           hasChildren={children.length > 0}
+          childCount={children.length}
           expanded={showChildren}
           onToggleExpand={() =>
             setExpanded((s) => {
@@ -136,7 +138,11 @@ export default function TaskFilterScreen() {
           onPress={() => router.push(`/task/${task.id}`)}
           extraMeta={extraMeta}
         />
-        {showChildren && children.map(renderNode)}
+        {showChildren && (
+          <SubtaskGroup count={children.length} depth={depth}>
+            {children.map((c) => renderNode(c, depth + 1))}
+          </SubtaskGroup>
+        )}
       </View>
     );
   }

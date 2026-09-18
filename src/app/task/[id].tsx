@@ -7,6 +7,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ParentCtx, TaskForm } from '@/components/task-form';
+import { SubtaskGroup } from '@/components/subtask-group';
 import { TaskRow, taskMeta } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -164,6 +165,7 @@ export default function TaskModal() {
           paused={childState === 'paused'}
           cancelled={childState === 'cancelled'}
           hasChildren={grand.length > 0}
+          childCount={grand.length}
           expanded={showChildren}
           onToggleExpand={() =>
             setExpanded((s) => {
@@ -175,7 +177,11 @@ export default function TaskModal() {
           }
           onPress={() => router.push(`/task/${t.id}`)}
         />
-        {showChildren && grand.map((c) => renderChild(c, depth + 1))}
+        {showChildren && (
+          <SubtaskGroup count={grand.length} depth={depth}>
+            {grand.map((c) => renderChild(c, depth + 1))}
+          </SubtaskGroup>
+        )}
       </View>
     );
   }
@@ -196,6 +202,23 @@ export default function TaskModal() {
           initialStatus={current.status}
           parent={parentCtx}
           onSubmit={async (data) => {
+            const myChildren = tasks.filter((t) => t.parentId === current.id);
+            const parentEnd = data.endDate ?? data.startDate;
+            const out = myChildren.filter((c) => {
+              const cStart = c.startDate;
+              const cEnd = c.endDate ?? c.startDate;
+              if (data.startDate && cStart && cStart < data.startDate) return true;
+              if (parentEnd && cEnd && cEnd > parentEnd) return true;
+              return false;
+            });
+            if (out.length > 0) {
+              const first = out[0];
+              toast.show(
+                `Sub-tarea(s) fuera del rango (p. ej. «${first.title}» hasta el ${formatDateDMY(first.endDate ?? first.startDate)}). Amplía el rango o reacomoda antes las sub-tareas.`,
+                'error'
+              );
+              return false;
+            }
             await db.updateTask(sqlite, current.id, data);
             void syncNotifications(sqlite);
             toast.show('Tarea actualizada', 'success');
@@ -262,7 +285,9 @@ export default function TaskModal() {
 
       {children.length > 0 && (
         <Field label={`Tareas dentro de esta (${children.length})`}>
-          <View style={styles.children}>{children.map((c) => renderChild(c, 0))}</View>
+          <SubtaskGroup count={children.length} depth={0}>
+            {children.map((c) => renderChild(c, 0))}
+          </SubtaskGroup>
         </Field>
       )}
 
@@ -342,13 +367,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 1,
-  },
-  children: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    overflow: 'hidden',
   },
   sub: {
     flexDirection: 'row',

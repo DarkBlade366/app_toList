@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
+import { SubtaskGroup } from '@/components/subtask-group';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { Task } from '@/lib/schema';
@@ -128,7 +129,7 @@ export default function TodayScreen() {
     setCompleted(comps);
   }
 
-  function renderNode(task: Task): ReactElement | null {
+  function renderNode(task: Task, depth = 0): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const state = statusForDate(task, completed, date);
     const isChecked = state === 'completed';
@@ -141,8 +142,9 @@ export default function TodayScreen() {
           overdue={isOverdue(task, date, completed)}
           paused={state === 'paused'}
           cancelled={state === 'cancelled'}
-          depth={0}
+          depth={depth}
           hasChildren={children.length > 0}
+          childCount={children.length}
           expanded={showChildren}
           onToggleExpand={() =>
             setExpanded((s) => {
@@ -155,7 +157,11 @@ export default function TodayScreen() {
           onCheck={() => toggle(task)}
           onPress={() => router.push(`/task/${task.id}`)}
         />
-        {showChildren && children.map(renderNode)}
+        {showChildren && (
+          <SubtaskGroup count={children.length} depth={depth}>
+            {children.map((c) => renderNode(c, depth + 1))}
+          </SubtaskGroup>
+        )}
       </View>
     );
   }
