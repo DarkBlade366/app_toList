@@ -58,6 +58,13 @@ export default function TasksScreen() {
             {pendingRoots.size} pendientes · {tasks.length} en total
           </ThemedText>
         </View>
+        <Pressable
+          style={styles.historyBtn}
+          onPress={() => router.push('/history')}
+          hitSlop={8}
+          accessibilityLabel="Historial y rachas">
+          <Ionicons name="stats-chart" size={22} color={Colors.text} />
+        </Pressable>
         <Pressable style={styles.newBtn} onPress={() => router.push('/task/new')} hitSlop={8}>
           <Ionicons name="add" size={24} color={Colors.white} />
         </Pressable>
@@ -116,6 +123,15 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 23,
     backgroundColor: Colors.tint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },

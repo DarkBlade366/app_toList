@@ -279,3 +279,17 @@ export async function resetRecurringDayStatuses(db: SQLiteDatabase, today: strin
     [new Date().toISOString(), today, today]
   );
 }
+
+export async function clearCompletions(db: SQLiteDatabase) {
+  await db.runAsync('DELETE FROM task_completions');
+  await db.runAsync(
+    `UPDATE tasks SET status = CASE WHEN status = 'completed' THEN 'pending' ELSE status END,
+       completed_at = NULL, updated_at = ?`,
+    [new Date().toISOString()]
+  );
+}
+
+export async function deleteAllTasks(db: SQLiteDatabase) {
+  await db.execAsync('PRAGMA foreign_keys = ON');
+  await db.runAsync('DELETE FROM tasks');
+}

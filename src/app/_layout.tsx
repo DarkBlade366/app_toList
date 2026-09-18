@@ -19,6 +19,7 @@ export default function RootLayout() {
             <Stack.Screen name="task/[id]" options={{ presentation: 'modal', headerShown: false }} />
             <Stack.Screen name="task-type/[type]" options={{ headerShown: false }} />
             <Stack.Screen name="task-filter" options={{ headerShown: false }} />
+            <Stack.Screen name="history" options={{ headerShown: false }} />
           </Stack>
           <StatusBar style="light" />
         </ThemeProvider>

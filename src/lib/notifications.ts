@@ -259,3 +259,29 @@ export async function syncNotifications(sqlite: SQLiteDatabase): Promise<void> {
     console.warn('syncNotifications falló:', e);
   }
 }
+
+export async function scheduleTestNotification(): Promise<boolean> {
+  const m = await load();
+  if (!m) return false;
+  try {
+    await ensureChannels(m);
+    await m.scheduleNotificationAsync({
+      content: {
+        title: 'Prueba de alarma',
+        body: 'Si estás leyendo esto, las notificaciones funcionan.',
+        sound: 'default',
+        color: Colors.alarm,
+        data: { url: '/' },
+      },
+      trigger: {
+        type: m.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 2,
+        channelId: ALARM_CHANNEL,
+      },
+    });
+    return true;
+  } catch (e) {
+    console.warn('scheduleTestNotification falló:', e);
+    return false;
+  }
+}

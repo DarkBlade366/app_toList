@@ -2,19 +2,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { useToast } from '@/components/toast';
 import { Card } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Screen, ScreenHeader } from '@/components/ui/screen';
 import { TimeField } from '@/components/ui/time-field';
 import { Colors } from '@/constants/theme';
+import { exportBackup } from '@/lib/backup';
 import * as db from '@/lib/db';
 import {
   hasNotificationPermission,
   notificationsSupported,
   requestNotificationPermission,
+  scheduleTestNotification,
   syncNotifications,
 } from '@/lib/notifications';
 import { RemindType, Settings } from '@/lib/schema';
@@ -24,6 +27,36 @@ const REMIND_OPTIONS: { key: RemindType; label: string; color: string }[] = [
   { key: 'notification', label: 'Notificación', color: Colors.tint },
   { key: 'none', label: 'Ninguna', color: Colors.muted },
 ];
+
+function AckRow({
+  label,
+  hint,
+  icon,
+  danger,
+  onPress,
+}: {
+  label: string;
+  hint?: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  danger?: boolean;
+  onPress: () => void;
+}) {
+  const tone = danger ? Colors.danger : Colors.tint;
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.ackRow, pressed && { opacity: 0.7 }]}
+      onPress={onPress}>
+      <View style={[styles.ackIcon, { borderColor: tone }, danger && { backgroundColor: 'rgba(248,113,113,0.12)' }]}>
+        <Ionicons name={icon} size={20} color={tone} />
+      </View>
+      <View style={styles.ackText}>
+        <ThemedText style={[styles.ackLabel, danger && { color: Colors.danger }]}>{label}</ThemedText>
+        {hint ? <ThemedText style={styles.ackHint}>{hint}</ThemedText> : null}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={Colors.muted} />
+    </Pressable>
+  );
+}
 
 function Row({
   label,
@@ -65,6 +98,8 @@ export default function SettingsScreen() {
   const sqlite = useSQLiteContext();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [permission, setPermission] = useState<'granted' | 'denied'>('denied');
+  const [busy, setBusy] = useState<string | null>(null);
+  const toast = useToast();
 
   useFocusEffect(
     useCallback(() => {
@@ -95,6 +130,71 @@ export default function SettingsScreen() {
     await requestNotificationPermission();
     setPermission((await hasNotificationPermission()) ? 'granted' : 'denied');
     await syncNotifications(sqlite);
+  }
+
+  async function onTestNotification() {
+    if (busy) return;
+    if (!notificationsSupported()) {
+      toast.show('En Expo Go no se pueden lanzar avisos; prueba en el APK final.');
+      return;
+    }
+    const granted = await hasNotificationPermission();
+    if (!granted) {
+      const ok = await requestNotificationPermission();
+      if (!ok) {
+        toast.show('Sin permiso de notificaciones no puedo avisarte.');
+        return;
+      }
+      setPermission('granted');
+    }
+    setBusy('test');
+    try {
+      const ok = await scheduleTestNotification();
+      toast.show(ok ? 'Aviso de prueba programado (llega en unos segundos).' : 'No se pudo programar el aviso.');
+      await syncNotifications(sqlite);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onExport() {
+    if (busy) return;
+    setBusy('export');
+    try {
+      const [tasks, completions] = await Promise.all([
+        db.getTasks(sqlite),
+        db.getCompletions(sqlite),
+      ]);
+      const res = await exportBackup(tasks, completions, settings!);
+      toast.show(
+        res.ok
+          ? res.uri
+            ? 'Backup exportado. Guárdalo a salvo.'
+            : 'Backup listo.'
+          : `No se pudo exportar: ${res.error ?? 'error desconocido'}`
+      );
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function confirmClear(action: () => void, title: string, message: string) {
+    Alert.alert(title, message, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Borrar', style: 'destructive', onPress: action },
+    ]);
+  }
+
+  async function onClearHistory() {
+    await db.clearCompletions(sqlite);
+    await syncNotifications(sqlite);
+    toast.show('Historial de completados vaciado.');
+  }
+
+  async function onDeleteAll() {
+    await db.deleteAllTasks(sqlite);
+    await syncNotifications(sqlite);
+    toast.show('Todas las tareas fueron eliminadas.');
   }
 
   return (
@@ -222,6 +322,53 @@ export default function SettingsScreen() {
           </Field>
         )}
       </Card>
+
+      <Card>
+        <Field label="Prueba y datos">
+          <AckRow
+            label="Probar alarma y aviso"
+            hint="Lanza una notificación de ejemplo en 2 segundos."
+            icon="alarm-outline"
+            onPress={onTestNotification}
+          />
+        </Field>
+        <Field label="Backup">
+          <AckRow
+            label="Exportar mis tareas (JSON)"
+            hint="Comparte o guarda una copia de tareas, completados y ajustes."
+            icon="download-outline"
+            onPress={onExport}
+          />
+        </Field>
+        <Field label="Zona de riesgo">
+          <AckRow
+            label="Vaciar historial de completados"
+            hint="Quita todos los completados y deja todo como pendiente."
+            icon="trash-outline"
+            danger
+            onPress={() =>
+              confirmClear(
+                onClearHistory,
+                'Vaciar historial',
+                'Se borrarán todos los completados (rachas y heatmap incluidos). No se pueden deshacer.'
+              )
+            }
+          />
+          <AckRow
+            label="Borrar todas las tareas"
+            hint="Elimina todas las tareas y su historial."
+            icon="warning-outline"
+            danger
+            onPress={() =>
+              confirmClear(
+                onDeleteAll,
+                'Borrar todo',
+                'Se eliminarán TODAS las tareas y completados. Esta acción no se puede deshacer.'
+              )
+            }
+          />
+        </Field>
+      </Card>
     </Screen>
   );
 }
@@ -274,4 +421,21 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   minText: { color: Colors.muted, fontWeight: '600' },
+  ackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  ackIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ackText: { flex: 1, gap: 2 },
+  ackLabel: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  ackHint: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
 });

@@ -3,7 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
 import { ReactElement, useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskRow } from '@/components/task-row';
@@ -34,6 +34,7 @@ export default function TaskFilterScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<StatusFilter>('pending');
+  const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const today = todayISO();
@@ -75,7 +76,17 @@ export default function TaskFilterScreen() {
     }
   }
 
-  const visible = sortByPriority(tasks.filter(applyFilter));
+  const q = query.trim().toLowerCase();
+  const visible = sortByPriority(
+    tasks
+      .filter(
+        (t) =>
+          q === '' ||
+          t.title.toLowerCase().includes(q) ||
+          (t.notes ?? '').toLowerCase().includes(q)
+      )
+      .filter(applyFilter)
+  );
   const tree = buildTree(visible);
   const { childrenOf } = groupTasksByParent(visible);
 
@@ -150,6 +161,25 @@ export default function TaskFilterScreen() {
         showsVerticalScrollIndicator={false}>
         <FilterDropdown options={STATUS_FILTERS} value={filter} onChange={setFilter} />
 
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={18} color={Colors.muted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Buscar por título o notas…"
+            placeholderTextColor={Colors.muted}
+            selectionColor={Colors.tint}
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {query !== '' ? (
+            <Pressable onPress={() => setQuery('')} hitSlop={10} accessibilityLabel="Limpiar búsqueda">
+              <Ionicons name="close-circle" size={18} color={Colors.muted} />
+            </Pressable>
+          ) : null}
+        </View>
+
         {visible.length === 0 ? (
           <View style={styles.emptyCard}>
             <EmptyState
@@ -203,5 +233,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
     paddingHorizontal: 12,
+  },
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 14,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: Colors.text,
   },
 });
