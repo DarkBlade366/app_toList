@@ -55,17 +55,18 @@ export default function TaskFilterScreen() {
   const byId = new Map(tasks.map((t) => [t.id, t]));
 
   function applyFilter(t: Task): boolean {
+    const state = statusForDate(t, completed, today);
     switch (filter) {
       case 'all':
         return true;
       case 'pending':
-        return t.status === 'pending' || t.status === 'in_progress';
+        return state === 'pending' || state === 'in_progress';
       case 'completed':
-        return t.status === 'completed';
+        return state === 'completed';
       case 'paused':
-        return t.status === 'paused';
+        return state === 'paused';
       case 'cancelled':
-        return t.status === 'cancelled';
+        return state === 'cancelled';
     }
   }
 

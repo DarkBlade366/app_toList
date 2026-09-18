@@ -64,17 +64,18 @@ export default function TaskTypeScreen() {
   );
 
   function applyFilter(t: Task): boolean {
+    const state = statusForDate(t, completed, today);
     switch (filter) {
       case 'all':
         return true;
       case 'todo':
-        return t.status === 'pending' || t.status === 'in_progress';
+        return state === 'pending' || state === 'in_progress';
       case 'done':
-        return t.status === 'completed';
+        return state === 'completed';
       case 'paused':
-        return t.status === 'paused';
+        return state === 'paused';
       case 'cancelled':
-        return t.status === 'cancelled';
+        return state === 'cancelled';
     }
   }
 
