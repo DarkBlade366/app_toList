@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
-import { ComponentProps, ReactElement, useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ComponentProps, ReactElement, useCallback, useMemo, useState } from 'react';
+import { LayoutAnimation, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DragGrip, ReorderProvider, RowAnchor, flattenVisible } from '@/components/reorder';
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -57,6 +58,7 @@ export default function TaskTypeScreen() {
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<Filter>('all');
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [dragActive, setDragActive] = useState(false);
 
   const today = todayISO();
 
@@ -114,15 +116,18 @@ export default function TaskTypeScreen() {
     setCompleted(comps);
   }
 
-  async function move(task: Task, direction: 'up' | 'down') {
-    const group =
-      task.parentId == null
-        ? tree
-        : childrenOf.get(task.parentId) ?? [];
-    const idx = group.findIndex((t) => t.id === task.id);
-    const other = group[idx + (direction === 'up' ? -1 : 1)];
-    if (!other || idx < 0) return;
-    await db.moveTask(sqlite, task.id, other.id);
+  const fullGroup = useMemo(() => groupTasksByParent(tasks), [tasks]);
+  const typeRootIds = useMemo(
+    () =>
+      tasks
+        .filter((t) => t.parentId == null && taskTypeOf(t) === taskType)
+        .map((t) => t.id),
+    [tasks, taskType]
+  );
+
+  async function handleReorder(movingId: number, orderedIds: number[]) {
+    await db.setSiblingOrder(sqlite, orderedIds);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const [list, comps] = await Promise.all([
       db.getTasks(sqlite),
       db.getCompletionsSetForDate(sqlite, today),
@@ -131,18 +136,13 @@ export default function TaskTypeScreen() {
     setCompleted(comps);
   }
 
-  function renderNode(task: Task, depth = 0): ReactElement | null {
+  function renderNode(task: Task, depth = 0, ghost = false): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const showChildren = expanded.has(task.id);
     const state = statusForDate(task, completed, today);
     const isDone = state === 'completed';
-    const group =
-      task.parentId == null ? tree : childrenOf.get(task.parentId) ?? [];
-    const idx = group.findIndex((t) => t.id === task.id);
-    const canMoveUp = idx > 0;
-    const canMoveDown = idx >= 0 && idx < group.length - 1;
-    return (
-      <View key={task.id}>
+    const body = (
+      <>
         <TaskRow
           task={task}
           checked={isDone}
@@ -160,23 +160,47 @@ export default function TaskTypeScreen() {
             })
           }
           onCheck={() => toggle(task)}
-          onPress={() => router.push(`/task/${task.id}`)}
-          onMoveUp={() => move(task, 'up')}
-          onMoveDown={() => move(task, 'down')}
-          canMoveUp={canMoveUp}
-          canMoveDown={canMoveDown}
+          onPress={ghost ? undefined : () => router.push(`/task/${task.id}`)}
+          dragHandle={ghost ? undefined : <DragGrip id={task.id} />}
         />
         {showChildren && (
           <SubtaskGroup count={children.length} depth={depth}>
-            {children.map((c) => renderNode(c, depth + 1))}
+            {children.map((c) => renderNode(c, depth + 1, ghost))}
           </SubtaskGroup>
         )}
-      </View>
+      </>
+    );
+    if (ghost) return <View key={task.id}>{body}</View>;
+    return (
+      <RowAnchor key={task.id} id={task.id}>
+        {body}
+      </RowAnchor>
     );
   }
 
+  const rows = useMemo(
+    () => flattenVisible(tree, expanded, childrenOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree, expanded]
+  );
+
   return (
-    <View style={[styles.flex, { paddingTop: insets.top + 8 }]}>
+    <ReorderProvider
+      rows={rows}
+      siblingsOf={(id) => {
+        const t = tasks.find((x) => x.id === id);
+        if (!t) return [];
+        return t.parentId == null
+          ? typeRootIds
+          : (fullGroup.childrenOf.get(t.parentId) ?? []).map((c) => c.id);
+      }}
+      onReorder={handleReorder}
+      renderGhost={(tid) => {
+        const t = visible.find((x) => x.id === tid);
+        return t ? renderNode(t, 0, true) : null;
+      }}
+      onDragStateChange={setDragActive}>
+      <View style={[styles.flex, { paddingTop: insets.top + 8 }]}>
       <View style={styles.head}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.back}>
           <Ionicons name="arrow-back" size={24} color={Colors.text} />
@@ -188,7 +212,8 @@ export default function TaskTypeScreen() {
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!dragActive}>
         <FilterDropdown options={FILTERS} value={filter} onChange={setFilter} />
 
         {visible.length === 0 ? (
@@ -203,7 +228,7 @@ export default function TaskTypeScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.list}>{tree.map(renderNode)}</View>
+            <View style={styles.list}>{tree.map((t) => renderNode(t))}</View>
             <Pressable
               style={styles.addBtn}
               onPress={() => router.push({ pathname: '/task/new', params: { type: taskType } })}>
@@ -214,6 +239,7 @@ export default function TaskTypeScreen() {
         )}
       </ScrollView>
     </View>
+    </ReorderProvider>
   );
 }
 

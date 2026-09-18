@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
-import { ReactElement, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { ReactElement, useCallback, useMemo, useState } from 'react';
+import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 
+import { DragGrip, ReorderProvider, RowAnchor, flattenVisible } from '@/components/reorder';
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -24,7 +25,7 @@ import {
   fromISO,
   groupTasksByParent,
   isOverdue,
-  sortByPriority,
+  overdueFirst,
   statusForDate,
   taskTypeOf,
   toISO,
@@ -64,8 +65,10 @@ export default function TodayScreen() {
     }, [sqlite, date])
   );
 
-  const dayTasks = sortByPriority(
-    dayTreeTasks(tasks, date).filter((t) => statusForDate(t, completed, date) !== 'cancelled')
+  const dayTasks = overdueFirst(
+    dayTreeTasks(tasks, date).filter((t) => statusForDate(t, completed, date) !== 'cancelled'),
+    date,
+    completed
   );
 
   const generalIds = new Set<number>();
@@ -83,8 +86,10 @@ export default function TodayScreen() {
       }
     }
   }
-  const generalTasks = sortByPriority(
-    tasks.filter((t) => generalIds.has(t.id) && statusForDate(t, completed, date) !== 'cancelled')
+  const generalTasks = overdueFirst(
+    tasks.filter((t) => generalIds.has(t.id) && statusForDate(t, completed, date) !== 'cancelled'),
+    date,
+    completed
   );
 
   const shownTasks = tab === 'day' ? dayTasks : generalTasks;
@@ -129,13 +134,13 @@ export default function TodayScreen() {
     setCompleted(comps);
   }
 
-  function renderNode(task: Task, depth = 0): ReactElement | null {
+  function renderNode(task: Task, depth = 0, ghost = false): ReactElement | null {
     const children = childrenOf.get(task.id) ?? [];
     const state = statusForDate(task, completed, date);
     const isChecked = state === 'completed';
     const showChildren = expanded.has(task.id);
-    return (
-      <View key={task.id}>
+    const body = (
+      <>
         <TaskRow
           task={task}
           checked={isChecked}
@@ -154,19 +159,66 @@ export default function TodayScreen() {
             })
           }
           onCheck={() => toggle(task)}
-          onPress={() => router.push(`/task/${task.id}`)}
+          onPress={ghost ? undefined : () => router.push(`/task/${task.id}`)}
+          dragHandle={ghost ? undefined : <DragGrip id={task.id} />}
         />
         {showChildren && (
           <SubtaskGroup count={children.length} depth={depth}>
-            {children.map((c) => renderNode(c, depth + 1))}
+            {children.map((c) => renderNode(c, depth + 1, ghost))}
           </SubtaskGroup>
         )}
-      </View>
+      </>
+    );
+    if (ghost) return <View key={task.id}>{body}</View>;
+    return (
+      <RowAnchor key={task.id} id={task.id}>
+        {body}
+      </RowAnchor>
     );
   }
 
+  const [dragActive, setDragActive] = useState(false);
+
+  const fullGroup = useMemo(() => groupTasksByParent(tasks), [tasks]);
+  const rootIds = useMemo(
+    () => tasks.filter((t) => t.parentId == null).map((t) => t.id),
+    [tasks]
+  );
+
+  async function handleReorder(movingId: number, orderedIds: number[]) {
+    await db.setSiblingOrder(sqlite, orderedIds);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const [all, comps] = await Promise.all([
+      db.getTasks(sqlite),
+      db.getCompletionsSetForDate(sqlite, date),
+    ]);
+    setTasks(all);
+    setCompleted(comps);
+  }
+
+  const rows = useMemo(
+    () => flattenVisible(tree, expanded, childrenOf),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree, expanded]
+  );
+
   return (
-    <Screen scroll>
+    <ReorderProvider
+      rows={rows}
+      siblingsOf={(id) => {
+        const t = tasks.find((x) => x.id === id);
+        if (!t) return [];
+        return t.parentId == null
+          ? rootIds
+          : (fullGroup.childrenOf.get(t.parentId) ?? []).map((c) => c.id);
+      }}
+      onReorder={handleReorder}
+      renderGhost={(tid) => {
+        const t = shownTasks.find((x) => x.id === tid);
+        return t ? renderNode(t, 0, true) : null;
+      }}
+      onDragStateChange={setDragActive}>
+      <Screen scroll scrollEnabled={!dragActive}>
       <View style={styles.header}>
         <Pressable style={styles.navBtn} hitSlop={10} onPress={() => setDate(addDays(date, -1))}>
           <Ionicons name="chevron-back" size={22} color={Colors.tint} />
@@ -266,7 +318,7 @@ export default function TodayScreen() {
             />
           </Card>
         ) : (
-          tree.map(renderNode)
+          tree.map((t) => renderNode(t))
         )}
       </View>
 
@@ -309,6 +361,7 @@ export default function TodayScreen() {
         </View>
       )}
     </Screen>
+    </ReorderProvider>
   );
 }
 

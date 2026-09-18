@@ -2,10 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
-import { ReactElement, useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ReactElement, useCallback, useMemo, useState } from 'react';
+import { Alert, LayoutAnimation, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DragGrip, ReorderProvider, RowAnchor, flattenVisible } from '@/components/reorder';
 import { ParentCtx, TaskForm } from '@/components/task-form';
 import { SubtaskGroup } from '@/components/subtask-group';
 import { TaskRow, taskMeta } from '@/components/task-row';
@@ -32,6 +33,32 @@ export default function TaskModal() {
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [dragActive, setDragActive] = useState(false);
+
+  const fullGroup = useMemo(() => groupTasksByParent(tasks), [tasks]);
+  const childList = useMemo(
+    () => (task ? tasks.filter((t) => t.parentId === task.id) : []),
+    [tasks, task]
+  );
+  const rows = useMemo(() => {
+    if (!task) return [];
+    return flattenVisible(childList, expanded, fullGroup.childrenOf);
+  }, [childList, expanded, fullGroup, task]);
+
+  const siblingsOf = useCallback(
+    (id: number) => {
+      const t = tasks.find((x) => x.id === id);
+      if (!t || t.parentId == null) return [];
+      return (fullGroup.childrenOf.get(t.parentId) ?? []).map((c) => c.id);
+    },
+    [tasks, fullGroup]
+  );
+
+  async function handleReorder(movingId: number, orderedIds: number[]) {
+    await db.setSiblingOrder(sqlite, orderedIds);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    await refresh();
+  }
 
   const today = todayISO();
 
@@ -66,7 +93,7 @@ export default function TaskModal() {
 
   const current = task;
 
-  const children = tasks.filter((t) => t.parentId === current.id);
+  const children = childList;
   const { childrenOf } = groupTasksByParent(tasks);
   const state = statusForDate(current, completed, today);
 
@@ -153,12 +180,12 @@ export default function TaskModal() {
     setStatus('pending', 'Tarea reactivada');
   }
 
-  function renderChild(t: Task, depth: number): ReactElement {
+  function renderChild(t: Task, depth: number, ghost = false): ReactElement {
     const grand = childrenOf.get(t.id) ?? [];
     const showChildren = expanded.has(t.id);
     const childState = statusForDate(t, completed, today);
-    return (
-      <View key={t.id}>
+    const body = (
+      <>
         <TaskRow
           task={t}
           checked={childState === 'completed'}
@@ -175,14 +202,21 @@ export default function TaskModal() {
               return next;
             })
           }
-          onPress={() => router.push(`/task/${t.id}`)}
+          onPress={ghost ? undefined : () => router.push(`/task/${t.id}`)}
+          dragHandle={ghost ? undefined : <DragGrip id={t.id} />}
         />
         {showChildren && (
           <SubtaskGroup count={grand.length} depth={depth}>
-            {grand.map((c) => renderChild(c, depth + 1))}
+            {grand.map((c) => renderChild(c, depth + 1, ghost))}
           </SubtaskGroup>
         )}
-      </View>
+      </>
+    );
+    if (ghost) return <View key={t.id}>{body}</View>;
+    return (
+      <RowAnchor key={t.id} id={t.id}>
+        {body}
+      </RowAnchor>
     );
   }
 
@@ -232,7 +266,19 @@ export default function TaskModal() {
   }
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 30 }}>
+    <ReorderProvider
+      rows={rows}
+      siblingsOf={siblingsOf}
+      onReorder={handleReorder}
+      renderGhost={(tid) => {
+        const t = tasks.find((x) => x.id === tid);
+        return t ? renderChild(t, 0, true) : null;
+      }}
+      onDragStateChange={setDragActive}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 30 }}
+        scrollEnabled={!dragActive}>
       <View style={styles.head}>
         <ThemedText style={styles.badge}>
           {current.priority === 'high' ? 'Alta' : current.priority === 'low' ? 'Baja' : 'Media'} prioridad
@@ -298,6 +344,7 @@ export default function TaskModal() {
         <ThemedText style={{ color: Colors.tint, fontWeight: '700' }}>Agregar tarea</ThemedText>
       </Pressable>
     </ScrollView>
+    </ReorderProvider>
   );
 }
 

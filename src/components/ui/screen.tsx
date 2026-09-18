@@ -12,7 +12,12 @@ export function Screen({
   children,
   scroll,
   keyboard,
-}: PropsWithChildren<{ scroll?: boolean; keyboard?: boolean }>) {
+  scrollEnabled = true,
+}: PropsWithChildren<{
+  scroll?: boolean;
+  keyboard?: boolean;
+  scrollEnabled?: boolean;
+}>) {
   let content = <View style={styles.content}>{children}</View>;
   if (scroll) {
     content = (
@@ -20,6 +25,7 @@ export function Screen({
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={scrollEnabled}
         keyboardShouldPersistTaps="handled">
         {content}
       </ScrollView>

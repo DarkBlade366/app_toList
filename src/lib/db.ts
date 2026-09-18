@@ -154,27 +154,19 @@ export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<numb
 }
 
 /**
- * Intercambia el orden manual (sort_order) de dos tareas. Así la tarea aId
- * pasa a ocupar la posición de bId y viceversa, sin tocar el resto.
+ * Fija el orden manual (sort_order) de un grupo de tareas hermanas en el orden dado.
+ * Se usa al soltar un arrastre: el grupo completo se reenumera 0..n.
  */
-export async function moveTask(db: SQLiteDatabase, aId: number, bId: number) {
+export async function setSiblingOrder(db: SQLiteDatabase, orderedIds: number[]) {
   const now = new Date().toISOString();
   await db.withTransactionAsync(async () => {
-    const [ra, rb] = await Promise.all([
-      db.getFirstAsync<{ sort_order: number }>('SELECT sort_order FROM tasks WHERE id = ?', aId),
-      db.getFirstAsync<{ sort_order: number }>('SELECT sort_order FROM tasks WHERE id = ?', bId),
-    ]);
-    if (!ra || !rb) return;
-    await db.runAsync('UPDATE tasks SET sort_order = ?, updated_at = ? WHERE id = ?', [
-      rb.sort_order,
-      now,
-      aId,
-    ]);
-    await db.runAsync('UPDATE tasks SET sort_order = ?, updated_at = ? WHERE id = ?', [
-      ra.sort_order,
-      now,
-      bId,
-    ]);
+    for (let i = 0; i < orderedIds.length; i++) {
+      await db.runAsync('UPDATE tasks SET sort_order = ?, updated_at = ? WHERE id = ?', [
+        i,
+        now,
+        orderedIds[i],
+      ]);
+    }
   });
 }
 

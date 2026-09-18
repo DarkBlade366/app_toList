@@ -296,6 +296,20 @@ export function sortByPriority<T extends Pick<Task, 'priority' | 'endTime'>>(ite
   });
 }
 
+/**
+ * Partición estable: las vencidas pasan al frente, respetando el orden de
+ * entrada (que es el orden manual sort_order). No reordena por horario/prioridad.
+ */
+export function overdueFirst<T extends Task>(
+  items: T[],
+  iso: string,
+  completedDates: ReadonlySet<string>
+): T[] {
+  const over = items.filter((t) => isOverdue(t, iso, completedDates));
+  const rest = items.filter((t) => !isOverdue(t, iso, completedDates));
+  return [...over, ...rest];
+}
+
 export function groupTasksByParent(tasks: Task[]): { roots: Task[]; childrenOf: Map<number, Task[]> } {
   const childrenOf = new Map<number, Task[]>();
   const roots: Task[] = [];

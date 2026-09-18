@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo } from 'react';
+import { ReactElement, useEffect, useMemo } from 'react';
 import { Animated, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -53,10 +53,7 @@ export function TaskRow({
   onCheck,
   onPress,
   extraMeta,
-  onMoveUp,
-  onMoveDown,
-  canMoveUp,
-  canMoveDown,
+  dragHandle,
 }: {
   task: Task;
   checked?: boolean;
@@ -71,10 +68,7 @@ export function TaskRow({
   onCheck?: () => void;
   onPress?: () => void;
   extraMeta?: string;
-  onMoveUp?: () => void;
-  onMoveDown?: () => void;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
+  dragHandle?: ReactElement;
 }) {
   const accent = overdue && !checked ? Colors.danger : PRIORITY_COLORS[task.priority];
   const muted = checked || cancelled;
@@ -97,6 +91,7 @@ export function TaskRow({
   return (
     <View style={styles.row}>
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
+      {dragHandle ?? null}
       <Pressable
         onPress={onCheck}
         disabled={!onCheck}
@@ -154,37 +149,6 @@ export function TaskRow({
           />
         </Pressable>
       ) : null}
-
-      {onMoveUp || onMoveDown ? (
-        <View style={styles.moveCol}>
-          <Pressable
-            onPress={onMoveUp}
-            disabled={!canMoveUp}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={`Mover ${task.title} arriba`}
-            accessibilityState={{ disabled: !canMoveUp }}>
-            <Ionicons
-              name="chevron-up"
-              size={17}
-              color={canMoveUp ? Colors.muted : 'rgba(138,148,166,0.3)'}
-            />
-          </Pressable>
-          <Pressable
-            onPress={onMoveDown}
-            disabled={!canMoveDown}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={`Mover ${task.title} abajo`}
-            accessibilityState={{ disabled: !canMoveDown }}>
-            <Ionicons
-              name="chevron-down"
-              size={17}
-              color={canMoveDown ? Colors.muted : 'rgba(138,148,166,0.3)'}
-            />
-          </Pressable>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -237,10 +201,4 @@ const styles = StyleSheet.create({
   body: { flex: 1, gap: 3 },
   title: { fontSize: 15, fontWeight: '600', color: Colors.text, lineHeight: 20 },
   meta: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
-  moveCol: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    alignSelf: 'center',
-  },
 });
