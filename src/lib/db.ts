@@ -217,9 +217,10 @@ export async function deleteTask(db: SQLiteDatabase, id: number) {
  *
  * Reglas de cascada:
  *  - Completar un padre completa también toda su rama (hijos, nietos, …) ese día.
- *  - Desmarcar cualquier tarea desmarca también sus ancestros (hasta la raíz).
- *  - Desmarcar una tarea desmarca además toda su propia rama (se revierte lo que
- *    se completó en bloque desde ella).
+ *  - Si al completar quedan completados TODOS los hijos de un padre, ese padre se
+ *    completa automáticamente, y esto se propaga hacia arriba en la cadena.
+ *  - Desmarcar cualquier tarea desmarca toda su propia rama y también a todos sus
+ *    ancestros (hasta la raíz), revirtiendo lo completado en bloque.
  */
 export async function toggleTaskCompletion(
   db: SQLiteDatabase,
@@ -237,6 +238,7 @@ export async function toggleTaskCompletion(
 
   const now = new Date().toISOString();
   const all = await getTasks(db);
+  const byId = new Map(all.map((t) => [t.id, t]));
 
   const subtree: number[] = [];
   const queue = [id];
@@ -293,7 +295,7 @@ export async function toggleTaskCompletion(
       }
       for (const tid of ids) {
         await db.runAsync(
-          'INSERT INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
+          'INSERT OR IGNORE INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
           [tid, date, now]
         );
       }
@@ -302,6 +304,44 @@ export async function toggleTaskCompletion(
          WHERE id IN (${ids.map(() => '?').join(',')})`,
         [now, now, ...ids]
       );
+
+      const completedForDate = new Set(
+        (
+          await db.getAllAsync<TaskCompletion>(
+            'SELECT task_id AS taskId, date FROM task_completions WHERE date = ?',
+            date
+          )
+        ).map((r) => String(r.taskId))
+      );
+
+      // Propaga hacia arriba: si con este completado TODOS los hijos que ocurren
+      // ese día quedan hechos, el padre también se completa (y así en cadena).
+      let upId = task.parentId;
+      let guard = 0;
+      while (upId != null && guard++ < 50) {
+        const par = byId.get(upId);
+        if (!par) break;
+        const kids = all.filter(
+          (c) =>
+            c.parentId === upId &&
+            occursOnDate(c, date) &&
+            c.status !== 'cancelled' &&
+            c.status !== 'paused'
+        );
+        if (kids.length === 0) break;
+        const allDone = kids.every((c) => completedForDate.has(String(c.id)));
+        if (!allDone || !occursOnDate(par, date)) break;
+        await db.runAsync(
+          'INSERT OR IGNORE INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
+          [par.id, date, now]
+        );
+        await db.runAsync(
+          "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?",
+          [now, now, par.id]
+        );
+        completedForDate.add(String(par.id));
+        upId = par.parentId;
+      }
     }
   });
 
