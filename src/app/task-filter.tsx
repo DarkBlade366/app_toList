@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
+import { EmptyState } from '@/components/ui/empty-state';
 import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
@@ -150,11 +151,22 @@ export default function TaskFilterScreen() {
         <FilterDropdown options={STATUS_FILTERS} value={filter} onChange={setFilter} />
 
         {visible.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="file-tray-outline" size={40} color={Colors.muted} />
-            <ThemedText style={styles.emptyText}>
-              No hay tareas {filter === 'all' ? '' : `con estado "${STATUS_FILTERS.find((f) => f.key === filter)?.label}"`}.
-            </ThemedText>
+          <View style={styles.emptyCard}>
+            <EmptyState
+              icon={
+                filter === 'completed'
+                  ? 'checkmark-done-outline'
+                  : filter === 'cancelled'
+                    ? 'close-circle-outline'
+                    : 'file-tray-outline'
+              }
+              title={
+                filter === 'all'
+                  ? 'No hay tareas'
+                  : `Nada con el estado "${STATUS_FILTERS.find((f) => f.key === filter)?.label.toLowerCase()}"`
+              }
+              hint="Cambia el filtro o crea una tarea desde el apartado Añadir."
+            />
           </View>
         ) : (
           <View style={styles.list}>{tree.map(renderNode)}</View>
@@ -185,6 +197,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     overflow: 'hidden',
   },
-  empty: { alignItems: 'center', gap: 10, paddingVertical: 32 },
-  emptyText: { color: Colors.muted, textAlign: 'center' },
+  emptyCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+  },
 });

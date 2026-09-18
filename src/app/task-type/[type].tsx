@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
-import { ReactElement, useCallback, useState } from 'react';
+import { ComponentProps, ReactElement, useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
+import { EmptyState } from '@/components/ui/empty-state';
 import { FilterDropdown } from '@/components/ui/filter-dropdown';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
@@ -24,6 +25,15 @@ import {
 } from '@/lib/logic';
 
 type Filter = 'all' | 'todo' | 'done' | 'paused' | 'cancelled';
+
+const TYPE_ICONS: Record<TaskType, ComponentProps<typeof Ionicons>['name']> = {
+  general: 'layers-outline',
+  once: 'calendar',
+  range: 'calendar-outline',
+  daily: 'sunny',
+  weekly: 'repeat',
+  monthly: 'calendar-number',
+};
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'Todas' },
@@ -149,17 +159,14 @@ export default function TaskTypeScreen() {
         <FilterDropdown options={FILTERS} value={filter} onChange={setFilter} />
 
         {visible.length === 0 ? (
-          <View style={styles.empty}>
-            <Ionicons name="file-tray-outline" size={40} color={Colors.muted} />
-            <ThemedText style={styles.emptyText}>
-              No hay tareas de este tipo. Pulsa + para añadir una.
-            </ThemedText>
-            <Pressable
-              style={styles.addBtn}
-              onPress={() => router.push({ pathname: '/task/new', params: { type: taskType } })}>
-              <Ionicons name="add" size={18} color={Colors.white} />
-              <ThemedText style={styles.addText}>Nueva {TASK_TYPE_LABELS[taskType]}</ThemedText>
-            </Pressable>
+          <View style={styles.emptyCard}>
+            <EmptyState
+              icon={TYPE_ICONS[taskType]}
+              title={`Sin ${TASK_TYPE_LABELS[taskType].toLowerCase()} aquí`}
+              hint="Crea la primera o cambia el filtro para ver otras."
+              actionLabel={`Nueva ${TASK_TYPE_LABELS[taskType]}`}
+              onAction={() => router.push({ pathname: '/task/new', params: { type: taskType } })}
+            />
           </View>
         ) : (
           <>
@@ -189,8 +196,13 @@ const styles = StyleSheet.create({
   back: { width: 34 },
   title: { fontSize: 20, fontWeight: '800', color: Colors.text },
   content: { paddingHorizontal: 16, gap: 14, paddingBottom: 32 },
-  empty: { alignItems: 'center', gap: 10, paddingVertical: 32 },
-  emptyText: { color: Colors.muted, textAlign: 'center' },
+  emptyCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingHorizontal: 12,
+  },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',

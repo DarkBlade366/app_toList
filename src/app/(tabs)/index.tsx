@@ -9,6 +9,7 @@ import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
 import { Colors } from '@/constants/theme';
@@ -19,12 +20,16 @@ import {
   buildTree,
   dayTreeTasks,
   formatDateLong,
+  fromISO,
   groupTasksByParent,
   isOverdue,
   sortByPriority,
   statusForDate,
   taskTypeOf,
+  toISO,
   todayISO,
+  weekdayLabel,
+  weekdayOf,
 } from '@/lib/logic';
 
 type HoyTab = 'day' | 'general';
@@ -94,6 +99,20 @@ export default function TodayScreen() {
   ).length;
   const isToday = date === todayISO();
   const ratio = shownTasks.length ? doneCount / shownTasks.length : 0;
+  const overdueRatio = shownTasks.length ? overdueCount / shownTasks.length : 0;
+
+  const longDate = formatDateLong(date);
+  const comma = longDate.indexOf(',');
+  const weekdayName = comma > 0 ? longDate.slice(0, comma) : 'Hoy';
+  const dayPart = comma > 0 ? longDate.slice(comma + 2) : longDate;
+
+  const startOfWeek = fromISO(date);
+  startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7));
+  const weekDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    return { iso: toISO(d), num: d.getDate(), dow: weekdayLabel(weekdayOf(toISO(d))).slice(0, 3) };
+  });
 
   async function toggle(task: Task) {
     const wasDone = statusForDate(task, completed, date) === 'completed';
@@ -148,9 +167,8 @@ export default function TodayScreen() {
           <Ionicons name="chevron-back" size={22} color={Colors.tint} />
         </Pressable>
         <View style={styles.headerCenter}>
-          <ThemedText style={styles.dateLabel}>
-            {formatDateLong(date).replace(/^\w/, (c) => c.toUpperCase())}
-          </ThemedText>
+          <ThemedText style={styles.dateWeekday}>{weekdayName.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.dateLabel}>{dayPart}</ThemedText>
           {isToday ? (
             <ThemedText style={styles.todayBadge}>Hoy</ThemedText>
           ) : (
@@ -162,6 +180,33 @@ export default function TodayScreen() {
         <Pressable style={styles.navBtn} hitSlop={10} onPress={() => setDate(addDays(date, 1))}>
           <Ionicons name="chevron-forward" size={22} color={Colors.tint} />
         </Pressable>
+      </View>
+
+      <View style={styles.weekRow}>
+        {weekDates.map((d) => {
+          const isSel = d.iso === date;
+          const isTod = d.iso === todayISO();
+          return (
+            <Pressable
+              key={d.iso}
+              style={[styles.weekPill, isSel && styles.weekPillSel]}
+              onPress={() => setDate(d.iso)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSel }}>
+              <ThemedText style={[styles.weekDow, isSel && { color: Colors.white }]}>
+                {d.dow}
+              </ThemedText>
+              <ThemedText
+                style={[
+                  styles.weekDay,
+                  isTod && !isSel && { color: Colors.tint, fontWeight: '800' },
+                  isSel && { color: Colors.white },
+                ]}>
+                {d.num}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
       </View>
 
       <Segmented
@@ -180,7 +225,14 @@ export default function TodayScreen() {
           <ThemedText style={styles.summaryPct}>({Math.round(ratio * 100)}%)</ThemedText>
         </View>
         <View style={styles.bar}>
-          <View style={[styles.barFill, { width: `${ratio * 100}%` }]} />
+          <View
+            style={[styles.barFill, styles.barDone, { width: `${ratio * 100}%` }]}
+          />
+          {overdueRatio > 0 ? (
+            <View
+              style={[styles.barFill, styles.barOverdue, { width: `${overdueRatio * 100}%` }]}
+            />
+          ) : null}
         </View>
         {overdueCount > 0 && (
           <ThemedText style={{ color: Colors.danger, fontSize: 13 }}>
@@ -192,11 +244,21 @@ export default function TodayScreen() {
       <View style={styles.list}>
         {shownTasks.length === 0 ? (
           <Card>
-            <ThemedText style={{ color: Colors.muted, textAlign: 'center', padding: 16 }}>
-              {tab === 'general'
-                ? 'Sin tareas generales para este día. Crea una tarea general o pínchala a esta fecha desde su detalle.'
-                : 'Sin tareas para este día.'}
-            </ThemedText>
+            <EmptyState
+              icon={tab === 'general' ? 'layers-outline' : 'sunny-outline'}
+              title={tab === 'general' ? 'Sin tareas generales' : 'Sin tareas para este día'}
+              hint={
+                tab === 'general'
+                  ? 'Una tarea general no está ligada a un día concreto y siempre vive en esta pestaña.'
+                  : 'Deja este día en blanco o añade una tarea para esta fecha.'
+              }
+              actionLabel={tab === 'general' ? 'Nueva tarea general' : 'Añadir para este día'}
+              onAction={() =>
+                tab === 'general'
+                  ? router.push({ pathname: '/task/new' })
+                  : router.push({ pathname: '/task/new', params: { type: 'once', date } })
+              }
+            />
           </Card>
         ) : (
           tree.map(renderNode)
@@ -253,22 +315,45 @@ const styles = StyleSheet.create({
   },
   navBtn: { padding: 6 },
   headerCenter: { alignItems: 'center', gap: 2 },
+  dateWeekday: { fontSize: 12, fontWeight: '800', color: Colors.tint, letterSpacing: 1.4 },
   dateLabel: { fontSize: 16, fontWeight: '700', color: Colors.text },
   todayBadge: { fontSize: 11, color: Colors.tint, fontWeight: '700' },
   goToday: { fontSize: 11, color: Colors.tint, fontWeight: '700' },
+  weekRow: {
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 6,
+  },
+  weekPill: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  weekPillSel: { backgroundColor: Colors.tint },
+  weekDow: { fontSize: 11, color: Colors.muted, fontWeight: '700' },
+  weekDay: { fontSize: 15, fontWeight: '600', color: Colors.text },
   summary: { paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
   summaryDone: { fontSize: 26, fontWeight: '800', color: Colors.tint },
   summaryTotal: { fontSize: 14, color: Colors.muted },
   summaryPct: { fontSize: 12, color: Colors.muted },
   bar: {
+    flexDirection: 'row',
     height: 6,
     borderRadius: 3,
     backgroundColor: Colors.border,
     marginTop: 12,
     overflow: 'hidden',
   },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: Colors.tint },
+  barFill: { height: 6 },
+  barDone: { backgroundColor: Colors.success },
+  barOverdue: { backgroundColor: Colors.danger },
   quickCol: { gap: 10, marginTop: 4 },
   quickBtn: {
     flexDirection: 'row',

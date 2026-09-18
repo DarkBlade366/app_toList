@@ -31,7 +31,9 @@ export function Segmented<T extends string>({
               { borderColor: active ? accent : Colors.border },
               active && { backgroundColor: accent },
             ]}
-            onPress={() => onChange(opt.key)}>
+            onPress={() => onChange(opt.key)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active, checked: active }}>
             <ThemedText
               style={[styles.label, { color: active ? Colors.white : Colors.muted }]}>
               {opt.label}
