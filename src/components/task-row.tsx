@@ -131,20 +131,20 @@ export function TaskRow({
       </Pressable>
 
       {hasChildren ? (
-        <View style={styles.expandWrap}>
-          {childCount != null && childCount > 0 ? (
-            <View style={styles.countChip}>
-              <ThemedText style={styles.countChipText}>{childCount}</ThemedText>
-            </View>
-          ) : null}
-          <Pressable onPress={onToggleExpand} hitSlop={10} accessibilityLabel={expanded ? 'Contraer sub-tareas' : 'Expandir sub-tareas'}>
-            <Ionicons
-              name={expanded ? 'chevron-down-circle' : 'chevron-forward-circle'}
-              size={22}
-              color={expanded ? Colors.tint : Colors.muted}
-            />
-          </Pressable>
-        </View>
+        <Pressable
+          style={styles.expandBtn}
+          onPress={onToggleExpand}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Contraer sub-tareas' : 'Expandir sub-tareas'}
+          accessibilityState={{ expanded: !!expanded }}>
+          <ThemedText style={styles.expandCount}>{childCount ?? ''}</ThemedText>
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={15}
+            color={Colors.tint}
+          />
+        </Pressable>
       ) : null}
     </View>
   );
@@ -169,17 +169,23 @@ const styles = StyleSheet.create({
     width: 3,
     borderRadius: 2,
   },
-  expandWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  countChip: {
-    minWidth: 20,
-    height: 20,
+  expandBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: 'rgba(34, 211, 238, 0.14)',
-    paddingHorizontal: 5,
+    gap: 4,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.5)',
+    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  countChipText: { fontSize: 11, fontWeight: '800', color: Colors.tint },
+  expandCount: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.tint,
+  },
   check: {
     width: 24,
     height: 24,
