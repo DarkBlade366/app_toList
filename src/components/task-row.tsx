@@ -54,6 +54,8 @@ export function TaskRow({
   onPress,
   extraMeta,
   dragHandle,
+  timeline,
+  timeChip,
 }: {
   task: Task;
   checked?: boolean;
@@ -69,6 +71,10 @@ export function TaskRow({
   onPress?: () => void;
   extraMeta?: string;
   dragHandle?: ReactElement;
+  /** Modo agenda: dibuja un punto sobre la línea del timeline. */
+  timeline?: boolean;
+  /** Chip mono con la hora (p. ej. "14:00"). */
+  timeChip?: string;
 }) {
   const accent = overdue && !checked ? Colors.danger : PRIORITY_COLORS[task.priority];
   const muted = checked || cancelled;
@@ -91,6 +97,7 @@ export function TaskRow({
   return (
     <View style={styles.row}>
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
+      {timeline ? <View style={[styles.timelineDot, { backgroundColor: accent }]} /> : null}
       {dragHandle ?? null}
       <Pressable
         onPress={onCheck}
@@ -126,11 +133,14 @@ export function TaskRow({
           numberOfLines={2}>
           {task.title}
         </ThemedText>
-        <ThemedText style={styles.meta} numberOfLines={2}>
-          {[extraMeta, taskMeta(task), overdue ? 'vencida' : null, paused ? 'en pausa' : null]
-            .filter(Boolean)
-            .join(' · ')}
-        </ThemedText>
+        <View style={styles.metaRow}>
+          {timeChip ? <ThemedText style={styles.timeChip}>{timeChip}</ThemedText> : null}
+          <ThemedText style={styles.meta} numberOfLines={2}>
+            {[extraMeta, taskMeta(task), overdue ? 'vencida' : null, paused ? 'en pausa' : null]
+              .filter(Boolean)
+              .join(' · ')}
+          </ThemedText>
+        </View>
       </Pressable>
 
       {hasChildren ? (
@@ -157,7 +167,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingLeft: 12,
     paddingRight: 12,
     gap: 12,
@@ -167,10 +177,21 @@ const styles = StyleSheet.create({
   accentBar: {
     position: 'absolute',
     left: 4,
-    top: 8,
-    bottom: 8,
+    top: 12,
+    bottom: 12,
     width: 3,
     borderRadius: 2,
+  },
+  timelineDot: {
+    position: 'absolute',
+    left: 1,
+    top: '50%',
+    width: 9,
+    height: 9,
+    marginTop: -4.5,
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: Colors.background,
   },
   expandBtn: {
     flexDirection: 'row',
@@ -190,15 +211,28 @@ const styles = StyleSheet.create({
     color: Colors.tint,
   },
   check: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    marginTop: 1,
   },
-  body: { flex: 1, gap: 3 },
-  title: { fontSize: 15, fontWeight: '600', color: Colors.text, lineHeight: 20 },
-  meta: { fontSize: 12, color: Colors.muted, lineHeight: 16 },
+  body: { flex: 1, gap: 4 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  timeChip: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: Colors.white,
+    backgroundColor: 'rgba(34, 211, 238, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.35)',
+    borderRadius: 7,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+  title: { fontSize: 16, fontWeight: '600', color: Colors.text, lineHeight: 21 },
+  meta: { fontSize: 12, color: Colors.muted, lineHeight: 16, flexShrink: 1 },
 });

@@ -6,6 +6,8 @@ import { ReactElement, useCallback, useMemo, useState } from 'react';
 import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 
 import { DragGrip, ReorderProvider, RowAnchor, flattenVisible } from '@/components/reorder';
+import { Confetti } from '@/components/confetti';
+import { ProgressRing } from '@/components/progress-ring';
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
@@ -16,12 +18,14 @@ import { Segmented } from '@/components/ui/segmented';
 import { SubtaskGroup } from '@/components/subtask-group';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
+import { DAY_CLOSED_BONUS } from '@/lib/gamification';
 import { Task } from '@/lib/schema';
 import {
   addDays,
   buildTree,
   dayTreeTasks,
   formatDateLong,
+  formatTime,
   fromISO,
   groupTasksByParent,
   isOverdue,
@@ -36,6 +40,8 @@ import {
 
 type HoyTab = 'day' | 'general';
 
+const DAY_CLOSED_REASON = 'day_close';
+
 export default function TodayScreen() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
@@ -45,6 +51,7 @@ export default function TodayScreen() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [burst, setBurst] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,7 +112,6 @@ export default function TodayScreen() {
   ).length;
   const isToday = date === todayISO();
   const ratio = shownTasks.length ? doneCount / shownTasks.length : 0;
-  const overdueRatio = shownTasks.length ? overdueCount / shownTasks.length : 0;
 
   const longDate = formatDateLong(date);
   const comma = longDate.indexOf(',');
@@ -124,14 +130,33 @@ export default function TodayScreen() {
     const wasDone = statusForDate(task, completed, date) === 'completed';
     const done = await db.toggleTaskCompletion(sqlite, task.id, date);
     void Haptics.impactAsync(done ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
-    if (!wasDone && done) toast.show('Completada', 'success');
-    if (wasDone) toast.show('Completado deshecho', 'info');
     const [all, comps] = await Promise.all([
       db.getTasks(sqlite),
       db.getCompletionsSetForDate(sqlite, date),
     ]);
     setTasks(all);
     setCompleted(comps);
+
+    if (done && !wasDone) {
+      const left = dayTreeTasks(all, date).filter(
+        (t) =>
+          statusForDate(t, comps, date) !== 'completed' &&
+          statusForDate(t, comps, date) !== 'cancelled'
+      ).length;
+      if (left === 0) {
+        setBurst((b) => b + 1);
+        if (isToday) {
+          await db.earnXp(sqlite, DAY_CLOSED_BONUS, DAY_CLOSED_REASON);
+          toast.show(`¡Día completo! +${DAY_CLOSED_BONUS} XP`, 'success');
+        } else {
+          toast.show('¡Día completo!', 'success');
+        }
+      } else {
+        toast.show('Completada', 'success');
+      }
+    } else if (wasDone) {
+      toast.show('Completado deshecho', 'info');
+    }
   }
 
   function renderNode(task: Task, depth = 0, ghost = false): ReactElement | null {
@@ -139,6 +164,11 @@ export default function TodayScreen() {
     const state = statusForDate(task, completed, date);
     const isChecked = state === 'completed';
     const showChildren = expanded.has(task.id);
+    const timelineMode = tab === 'day';
+    const timeChip =
+      timelineMode && (task.endTime || task.startTime)
+        ? formatTime(task.endTime ?? task.startTime!)
+        : undefined;
     const body = (
       <>
         <TaskRow
@@ -150,6 +180,8 @@ export default function TodayScreen() {
           hasChildren={children.length > 0}
           childCount={children.length}
           expanded={showChildren}
+          timeline={timelineMode}
+          timeChip={timeChip}
           onToggleExpand={() =>
             setExpanded((s) => {
               const next = new Set(s);
@@ -203,6 +235,7 @@ export default function TodayScreen() {
   );
 
   return (
+    <>
     <ReorderProvider
       rows={rows}
       siblingsOf={(id) => {
@@ -218,7 +251,8 @@ export default function TodayScreen() {
         return t ? renderNode(t, 0, true) : null;
       }}
       onDragStateChange={setDragActive}>
-      <Screen scroll scrollEnabled={!dragActive}>
+      <Screen scroll
+        scrollEnabled={!dragActive}>
       <View style={styles.header}>
         <Pressable style={styles.navBtn} hitSlop={10} onPress={() => setDate(addDays(date, -1))}>
           <Ionicons name="chevron-back" size={22} color={Colors.tint} />
@@ -276,29 +310,47 @@ export default function TodayScreen() {
       />
 
       <Card style={styles.summary}>
-        <View style={styles.summaryRow}>
-          <ThemedText style={styles.summaryDone}>{doneCount}</ThemedText>
-          <ThemedText style={styles.summaryTotal}>/ {shownTasks.length} tareas</ThemedText>
-          <ThemedText style={styles.summaryPct}>({Math.round(ratio * 100)}%)</ThemedText>
+        <View style={styles.summaryMain}>
+          <ProgressRing
+            progress={ratio}
+            size={104}
+            strokeWidth={10}
+            color={ratio >= 1 && shownTasks.length > 0 ? Colors.success : Colors.tint}>
+            <ThemedText style={styles.ringPct}>{Math.round(ratio * 100)}%</ThemedText>
+            <ThemedText style={styles.ringSub}>{isToday ? 'hoy' : 'ese día'}</ThemedText>
+          </ProgressRing>
+          <View style={styles.summaryInfo}>
+            <View style={styles.summaryHero}>
+              <ThemedText style={styles.summaryDoneNum}>{doneCount}</ThemedText>
+              <ThemedText style={styles.summaryTotal}>
+                de {shownTasks.length} tarea{shownTasks.length === 1 ? '' : 's'} hechas
+              </ThemedText>
+            </View>
+            {overdueCount > 0 ? (
+              <View style={styles.summaryOverdueRow}>
+                <Ionicons name="alert-circle" size={14} color={Colors.danger} />
+                <ThemedText style={styles.summaryOverdue}>
+                  {overdueCount} vencida{overdueCount > 1 ? 's' : ''} sin hacer
+                </ThemedText>
+              </View>
+            ) : shownTasks.length > 0 ? (
+              <View style={styles.summaryOverdueRow}>
+                <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
+                <ThemedText style={styles.summaryClear}>Todo al día</ThemedText>
+              </View>
+            ) : null}
+            {showQuick && (
+              <Pressable style={styles.focusBtn} onPress={() => router.push('/focus')}>
+                <Ionicons name="eye-outline" size={16} color={Colors.tint} />
+                <ThemedText style={styles.focusLabel}>Enfocar la primera pendiente</ThemedText>
+              </Pressable>
+            )}
+          </View>
         </View>
-        <View style={styles.bar}>
-          <View
-            style={[styles.barFill, styles.barDone, { width: `${ratio * 100}%` }]}
-          />
-          {overdueRatio > 0 ? (
-            <View
-              style={[styles.barFill, styles.barOverdue, { width: `${overdueRatio * 100}%` }]}
-            />
-          ) : null}
-        </View>
-        {overdueCount > 0 && (
-          <ThemedText style={{ color: Colors.danger, fontSize: 13 }}>
-            {overdueCount} vencida{overdueCount > 1 ? 's' : ''}
-          </ThemedText>
-        )}
       </Card>
 
       <View style={styles.list}>
+        {tab === 'day' ? <View pointerEvents="none" style={styles.timelineLine} /> : null}
         {shownTasks.length === 0 ? (
           <Card>
             <EmptyState
@@ -362,6 +414,8 @@ export default function TodayScreen() {
       )}
     </Screen>
     </ReorderProvider>
+      <Confetti burst={burst} />
+    </>
   );
 }
 
@@ -396,22 +450,40 @@ const styles = StyleSheet.create({
   weekPillSel: { backgroundColor: Colors.tint },
   weekDow: { fontSize: 11, color: Colors.muted, fontWeight: '700' },
   weekDay: { fontSize: 15, fontWeight: '600', color: Colors.text },
-  summary: { paddingVertical: 4 },
-  summaryRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  summaryDone: { fontSize: 26, fontWeight: '800', color: Colors.tint },
+  summary: { paddingVertical: 6 },
+  summaryMain: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  summaryInfo: { flex: 1, gap: 10 },
+  summaryHero: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  summaryDoneNum: { fontSize: 40, fontWeight: '800', color: Colors.text },
   summaryTotal: { fontSize: 14, color: Colors.muted },
-  summaryPct: { fontSize: 12, color: Colors.muted },
-  bar: {
+  ringPct: { fontSize: 22, fontWeight: '800', color: Colors.text },
+  ringSub: { fontSize: 11, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  summaryOverdueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  summaryOverdue: { fontSize: 13, color: Colors.danger, flexShrink: 1 },
+  summaryClear: { fontSize: 13, color: Colors.success },
+  focusBtn: {
     flexDirection: 'row',
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-    marginTop: 12,
-    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.45)',
+    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
-  barFill: { height: 6 },
-  barDone: { backgroundColor: Colors.success },
-  barOverdue: { backgroundColor: Colors.danger },
+  focusLabel: { fontSize: 13, fontWeight: '700', color: Colors.tint },
+  timelineLine: {
+    position: 'absolute',
+    left: 16.5,
+    top: 0,
+    bottom: 0,
+    width: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(138, 148, 166, 0.25)',
+  },
   quickCol: { gap: 10, marginTop: 4 },
   quickBtn: {
     flexDirection: 'row',

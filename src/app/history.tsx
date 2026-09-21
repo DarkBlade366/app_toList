@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Colors } from '@/constants/theme';
 import * as db from '@/lib/db';
+import { achievements, levelInfo } from '@/lib/gamification';
 import { TaskCompletion } from '@/lib/schema';
 import { addDays, fromISO, todayISO, toISO, weekdayLabel } from '@/lib/logic';
 
@@ -31,12 +32,16 @@ export default function HistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [completions, setCompletions] = useState<TaskCompletion[]>([]);
+  const [xp, setXp] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      db.getCompletions(sqlite).then((list) => {
-        if (active) setCompletions(list);
+      Promise.all([db.getCompletions(sqlite), db.getXp(sqlite)]).then(([list, total]) => {
+        if (active) {
+          setCompletions(list);
+          setXp(total);
+        }
       });
       return () => {
         active = false;
@@ -77,6 +82,14 @@ export default function HistoryScreen() {
   const firstDate = byDay.size ? [...byDay.keys()].sort()[0] : null;
   const lastDate = byDay.size ? [...byDay.keys()].sort().reverse()[0] : null;
 
+  const info = levelInfo(xp);
+  const ach = achievements({
+    total: completions.length,
+    activeDays: byDay.size,
+    streak,
+    level: info.level,
+  });
+
   return (
     <View style={[styles.flex, { paddingTop: insets.top + 8 }]}>
       <View style={styles.head}>
@@ -104,6 +117,43 @@ export default function HistoryScreen() {
             <Stat label="Completadas" value={String(completions.length)} accent />
             <Stat label="Días activos" value={String(byDay.size)} accent={byDay.size > 0} />
           </View>
+
+          <Card style={styles.xpCard}>
+            <View style={styles.xpHead}>
+              <View style={styles.levelBadge}>
+                <ThemedText style={styles.levelValue}>{info.level}</ThemedText>
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.xpTitle}>Nivel {info.level}</ThemedText>
+                <ThemedText style={styles.xpSub}>
+                  {info.current} / {info.next} XP hacia el nivel {info.level + 1}
+                </ThemedText>
+              </View>
+              <ThemedText style={styles.xpTotal}>{xp} XP</ThemedText>
+            </View>
+            <View style={styles.xpBar}>
+              <View style={[styles.xpFill, { width: `${Math.round(info.progress * 100)}%` }]} />
+            </View>
+          </Card>
+
+          <Card>
+            <ThemedText style={styles.cardTitle}>Logros</ThemedText>
+            {ach.unlocked.length === 0 ? (
+              <ThemedText style={styles.resumeText}>
+                Aún no has desbloqueado logros. Completa tareas para empezar a ganarlos.
+              </ThemedText>
+            ) : (
+              ach.unlocked.map((label) => (
+                <View key={label} style={styles.achRow}>
+                  <Ionicons name="trophy" size={16} color={Colors.success} />
+                  <ThemedText style={styles.achLabel}>{label}</ThemedText>
+                </View>
+              ))
+            )}
+            <ThemedText style={styles.achCount}>
+              {ach.unlocked.length} de {ach.total} logros desbloqueados
+            </ThemedText>
+          </Card>
 
           <Card>
             <ThemedText style={styles.cardTitle}>Actividad</ThemedText>
@@ -206,6 +256,37 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 11, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.4 },
   statValue: { fontSize: 18, fontWeight: '800', color: Colors.text },
   cardTitle: { fontSize: 15, fontWeight: '800', color: Colors.text },
+  xpCard: { gap: 10 },
+  xpHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  levelBadge: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(34, 211, 238, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.5)',
+  },
+  levelValue: { fontSize: 20, fontWeight: '800', color: Colors.tint },
+  xpTitle: { fontSize: 17, fontWeight: '800', color: Colors.text },
+  xpSub: { fontSize: 12, color: Colors.muted, marginTop: 1 },
+  xpTotal: { fontSize: 13, fontWeight: '800', color: Colors.tint },
+  xpBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.border,
+    overflow: 'hidden',
+  },
+  xpFill: { height: 8, borderRadius: 4, backgroundColor: Colors.tint },
+  achRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 5,
+  },
+  achLabel: { fontSize: 14, color: Colors.text, flexShrink: 1 },
+  achCount: { fontSize: 12, color: Colors.muted, marginTop: 6 },
   grid: { flexDirection: 'row', gap: 6 },
   weekdayCol: { gap: 3 },
   weeksCol: { flexDirection: 'row', gap: 3 },

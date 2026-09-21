@@ -1,7 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { XP_BY_PRIORITY } from './gamification';
 import { occursOnDate } from './logic';
-import { Priority, Recurrence, RemindType, Settings, Task, TaskCompletion, TaskStatus } from './schema';
+import { Priority, Recurrence, RemindType, Settings, Task, TaskCompletion, TaskStatus, XpEntry } from './schema';
 
 export type {
   Priority,
@@ -11,6 +12,7 @@ export type {
   Task,
   TaskCompletion,
   TaskStatus,
+  XpEntry,
 } from './schema';
 
 export interface TaskWrite {
@@ -321,6 +323,17 @@ export async function toggleTaskCompletion(
         [now, now, ...ids]
       );
 
+      // Orquesta XP por cada tarea completada este día.
+      for (const tid of ids) {
+        const t = byId.get(tid);
+        if (!t) continue;
+        const xp = XP_BY_PRIORITY[t.priority] ?? XP_BY_PRIORITY.medium;
+        await db.runAsync(
+          'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
+          [xp, 'task', tid, now]
+        );
+      }
+
       const completedForDate = new Set(
         (
           await db.getAllAsync<TaskCompletion>(
@@ -382,6 +395,35 @@ export async function getCompletionsSetForDate(db: SQLiteDatabase, date: string)
 export async function getCompletions(db: SQLiteDatabase): Promise<TaskCompletion[]> {
   return db.getAllAsync<TaskCompletion>(
     'SELECT task_id AS taskId, date FROM task_completions ORDER BY date'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Gamificación (XP)
+// ---------------------------------------------------------------------------
+
+export async function getXp(db: SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ xp: number }>(
+    'SELECT COALESCE(SUM(xp), 0) AS xp FROM xp_log'
+  );
+  return row?.xp ?? 0;
+}
+
+export async function earnXp(
+  db: SQLiteDatabase,
+  xp: number,
+  reason: string,
+  taskId: number | null = null
+): Promise<void> {
+  await db.runAsync(
+    'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
+    [xp, reason, taskId, new Date().toISOString()]
+  );
+}
+
+export async function getXpLog(db: SQLiteDatabase): Promise<XpEntry[]> {
+  return db.getAllAsync<XpEntry>(
+    'SELECT id, xp, reason, task_id AS taskId, earned_at AS earnedAt FROM xp_log ORDER BY earned_at DESC'
   );
 }
 

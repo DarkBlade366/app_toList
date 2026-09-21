@@ -2,7 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Colors } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 
 export function Card({ children, style }: ViewProps) {
   return <View style={[styles.card, style]}>{children}</View>;
@@ -40,20 +40,22 @@ export function StatCard({ label, value, valueColor, gradient, hints, style }: S
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 20,
+    borderRadius: Radius.lg,
     padding: 20,
     backgroundColor: Colors.card,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
     gap: 14,
+    ...Shadow.soft,
   },
   statCard: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: Radius.lg,
     padding: 18,
     backgroundColor: Colors.card,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: Colors.border,
+    ...Shadow.soft,
     overflow: 'hidden',
     gap: 8,
   },

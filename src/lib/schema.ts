@@ -44,6 +44,14 @@ export interface TaskCompletion {
   date: string;
 }
 
+export interface XpEntry {
+  id: number;
+  xp: number;
+  reason: string;
+  taskId: number | null;
+  earnedAt: string;
+}
+
 const SETTING_DEFAULTS: Record<keyof Settings, string> = {
   remindersEnabled: '1',
   defaultRemindType: 'alarm',
@@ -54,7 +62,7 @@ const SETTING_DEFAULTS: Record<keyof Settings, string> = {
 };
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 3;
+  const DATABASE_VERSION = 4;
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = versionRow?.user_version ?? 0;
 
@@ -109,6 +117,17 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY NOT NULL,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS xp_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  xp INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  task_id INTEGER,
+  earned_at TEXT NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_xp_earned ON xp_log (earned_at);
 
 INSERT OR IGNORE INTO settings (key, value) VALUES ${Object.entries(SETTING_DEFAULTS)
       .map(([k, v]) => `('${k}', '${v}')`)
@@ -172,6 +191,19 @@ ALTER TABLE tasks ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks (sort_order);
 `);
     currentDbVersion = 3;
+  } else if (currentDbVersion === 3) {
+    await db.execAsync(`
+CREATE TABLE IF NOT EXISTS xp_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  xp INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  task_id INTEGER,
+  earned_at TEXT NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_xp_earned ON xp_log (earned_at);
+`);
+    currentDbVersion = 4;
   }
 
   await db.execAsync('PRAGMA foreign_keys = ON');

@@ -38,6 +38,47 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof palette;
 
+/** Acentos por prioridad (consistente con task-row.tsx). */
+export const PriorityAccent = {
+  low: palette.success,
+  medium: palette.warning,
+  high: palette.danger,
+} as const;
+
+/** Radios de esquina consistentes a lo largo de la app. */
+export const Radius = {
+  sm: 10,
+  md: 14,
+  lg: 20,
+  xl: 28,
+  pill: 999,
+} as const;
+
+/** Sombras suaves para la estética "Things 3". */
+export const Shadow = {
+  card: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.28,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  soft: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  glow: {
+    shadowColor: palette.tint,
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 10,
+  },
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     sans: 'system-ui',
