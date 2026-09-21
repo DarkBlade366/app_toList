@@ -7,6 +7,7 @@ import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 
 import { DragGrip, ReorderProvider, RowAnchor, flattenVisible } from '@/components/reorder';
 import { Confetti } from '@/components/confetti';
+import { DayCards } from '@/components/day-cards';
 import { ProgressRing } from '@/components/progress-ring';
 import { TaskRow } from '@/components/task-row';
 import { ThemedText } from '@/components/themed-text';
@@ -16,9 +17,9 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
 import { SubtaskGroup } from '@/components/subtask-group';
-import { Colors } from '@/constants/theme';
+import { Colors, Shadow } from '@/constants/theme';
 import * as db from '@/lib/db';
-import { DAY_CLOSED_BONUS } from '@/lib/gamification';
+import { DAY_CLOSED_BONUS, levelInfo } from '@/lib/gamification';
 import { Task } from '@/lib/schema';
 import {
   addDays,
@@ -52,19 +53,22 @@ export default function TodayScreen() {
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [burst, setBurst] = useState(0);
+  const [xp, setXp] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
         await db.resetRecurringDayStatuses(sqlite, todayISO()).catch(() => {});
-        const [all, comps] = await Promise.all([
+        const [all, comps, xpVal] = await Promise.all([
           db.getTasks(sqlite),
           db.getCompletionsSetForDate(sqlite, date),
+          db.getXp(sqlite),
         ]);
         if (!active) return;
         setTasks(all);
         setCompleted(comps);
+        setXp(xpVal);
       })();
       return () => {
         active = false;
@@ -130,12 +134,14 @@ export default function TodayScreen() {
     const wasDone = statusForDate(task, completed, date) === 'completed';
     const done = await db.toggleTaskCompletion(sqlite, task.id, date);
     void Haptics.impactAsync(done ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium);
-    const [all, comps] = await Promise.all([
+    const [all, comps, xpVal] = await Promise.all([
       db.getTasks(sqlite),
       db.getCompletionsSetForDate(sqlite, date),
+      db.getXp(sqlite),
     ]);
     setTasks(all);
     setCompleted(comps);
+    setXp(xpVal);
 
     if (done && !wasDone) {
       const left = dayTreeTasks(all, date).filter(
@@ -237,7 +243,7 @@ export default function TodayScreen() {
   return (
     <>
     <ReorderProvider
-      rows={rows}
+      rows={tab === 'general' ? rows : []}
       siblingsOf={(id) => {
         const t = tasks.find((x) => x.id === id);
         if (!t) return [];
@@ -313,8 +319,8 @@ export default function TodayScreen() {
         <View style={styles.summaryMain}>
           <ProgressRing
             progress={ratio}
-            size={104}
-            strokeWidth={10}
+            size={140}
+            strokeWidth={12}
             color={ratio >= 1 && shownTasks.length > 0 ? Colors.success : Colors.tint}>
             <ThemedText style={styles.ringPct}>{Math.round(ratio * 100)}%</ThemedText>
             <ThemedText style={styles.ringSub}>{isToday ? 'hoy' : 'ese día'}</ThemedText>
@@ -339,6 +345,12 @@ export default function TodayScreen() {
                 <ThemedText style={styles.summaryClear}>Todo al día</ThemedText>
               </View>
             ) : null}
+            <View style={styles.xpRow}>
+              <Ionicons name="star" size={13} color={Colors.warning} />
+              <ThemedText style={styles.xpLabel}>
+                Nv {levelInfo(xp).level} · {xp} XP
+              </ThemedText>
+            </View>
             {showQuick && (
               <Pressable style={styles.focusBtn} onPress={() => router.push('/focus')}>
                 <Ionicons name="eye-outline" size={16} color={Colors.tint} />
@@ -350,23 +362,36 @@ export default function TodayScreen() {
       </Card>
 
       <View style={styles.list}>
-        {tab === 'day' ? <View pointerEvents="none" style={styles.timelineLine} /> : null}
-        {shownTasks.length === 0 ? (
+        {tab === 'day' ? (
+          dayTasks.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon="sunny-outline"
+                title="Sin tareas para este día"
+                hint="Deja este día en blanco o añade una tarea para esta fecha."
+                actionLabel="Añadir para este día"
+                onAction={() =>
+                  router.push({ pathname: '/task/new', params: { type: 'once', date } })
+                }
+              />
+            </Card>
+          ) : (
+            <DayCards
+              tasks={dayTasks}
+              completed={completed}
+              date={date}
+              onToggle={toggle}
+              onOpen={(id) => router.push(`/task/${id}`)}
+            />
+          )
+        ) : shownTasks.length === 0 ? (
           <Card>
             <EmptyState
-              icon={tab === 'general' ? 'layers-outline' : 'sunny-outline'}
-              title={tab === 'general' ? 'Sin tareas generales' : 'Sin tareas para este día'}
-              hint={
-                tab === 'general'
-                  ? 'Una tarea general no está ligada a un día concreto y siempre vive en esta pestaña.'
-                  : 'Deja este día en blanco o añade una tarea para esta fecha.'
-              }
-              actionLabel={tab === 'general' ? 'Nueva tarea general' : 'Añadir para este día'}
-              onAction={() =>
-                tab === 'general'
-                  ? router.push({ pathname: '/task/new' })
-                  : router.push({ pathname: '/task/new', params: { type: 'once', date } })
-              }
+              icon="layers-outline"
+              title="Sin tareas generales"
+              hint="Una tarea general no está ligada a un día concreto y siempre vive en esta pestaña."
+              actionLabel="Nueva tarea general"
+              onAction={() => router.push({ pathname: '/task/new' })}
             />
           </Card>
         ) : (
@@ -375,42 +400,17 @@ export default function TodayScreen() {
       </View>
 
       {showQuick && (
-        <View style={styles.quickCol}>
-          <Pressable
-            style={styles.quickBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/task/new',
-                params: { type: 'once', date: todayISO() },
-              })
-            }>
-            <Ionicons name="add-circle" size={20} color={Colors.tint} />
-            <View style={styles.quickBody}>
-              <ThemedText style={styles.quickLabel}>Añadir tarea para hoy</ThemedText>
-              <ThemedText style={styles.quickHint}>
-                Tarea de un día para {formatDateLong(todayISO())}
-              </ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
-          </Pressable>
-          <Pressable
-            style={styles.quickBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/task/new',
-                params: { type: 'once', date: addDays(todayISO(), 1) },
-              })
-            }>
-            <Ionicons name="add-circle" size={20} color={Colors.tint} />
-            <View style={styles.quickBody}>
-              <ThemedText style={styles.quickLabel}>Añadir tarea para mañana</ThemedText>
-              <ThemedText style={styles.quickHint}>
-                Tarea de un día para {formatDateLong(addDays(todayISO(), 1))}
-              </ThemedText>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={Colors.muted} />
-          </Pressable>
-        </View>
+        <Pressable
+          style={styles.fab}
+          onPress={() =>
+            router.push({
+              pathname: '/task/new',
+              params: { type: 'once', date: todayISO() },
+            })
+          }
+          accessibilityLabel="Añadir tarea para hoy">
+          <Ionicons name="add" size={30} color={Colors.white} />
+        </Pressable>
       )}
     </Screen>
     </ReorderProvider>
@@ -450,17 +450,19 @@ const styles = StyleSheet.create({
   weekPillSel: { backgroundColor: Colors.tint },
   weekDow: { fontSize: 11, color: Colors.muted, fontWeight: '700' },
   weekDay: { fontSize: 15, fontWeight: '600', color: Colors.text },
-  summary: { paddingVertical: 6 },
-  summaryMain: { flexDirection: 'row', alignItems: 'center', gap: 18 },
-  summaryInfo: { flex: 1, gap: 10 },
+  summary: { paddingVertical: 10 },
+  summaryMain: { flexDirection: 'row', alignItems: 'center', gap: 22 },
+  summaryInfo: { flex: 1, gap: 8 },
   summaryHero: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
   summaryDoneNum: { fontSize: 40, fontWeight: '800', color: Colors.text },
   summaryTotal: { fontSize: 14, color: Colors.muted },
-  ringPct: { fontSize: 22, fontWeight: '800', color: Colors.text },
-  ringSub: { fontSize: 11, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  ringPct: { fontSize: 30, fontWeight: '800', color: Colors.text },
+  ringSub: { fontSize: 12, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
   summaryOverdueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryOverdue: { fontSize: 13, color: Colors.danger, flexShrink: 1 },
   summaryClear: { fontSize: 13, color: Colors.success },
+  xpRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  xpLabel: { fontSize: 13, fontWeight: '800', color: Colors.warning },
   focusBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -475,30 +477,18 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   focusLabel: { fontSize: 13, fontWeight: '700', color: Colors.tint },
-  timelineLine: {
+  fab: {
     position: 'absolute',
-    left: 16.5,
-    top: 0,
-    bottom: 0,
-    width: 2,
-    borderRadius: 1,
-    backgroundColor: 'rgba(138, 148, 166, 0.25)',
-  },
-  quickCol: { gap: 10, marginTop: 4 },
-  quickBtn: {
-    flexDirection: 'row',
+    right: 20,
+    bottom: 20,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: Colors.tint,
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    ...Shadow.glow,
   },
-  quickBody: { flex: 1 },
-  quickLabel: { color: Colors.tint, fontSize: 14, fontWeight: '700' },
-  quickHint: { color: Colors.muted, fontSize: 12, marginTop: 2 },
   list: {
     backgroundColor: Colors.card,
     borderRadius: 14,
