@@ -116,6 +116,7 @@ export default function TodayScreen() {
   ).length;
   const isToday = date === todayISO();
   const ratio = shownTasks.length ? doneCount / shownTasks.length : 0;
+  const info = levelInfo(xp);
 
   const longDate = formatDateLong(date);
   const comma = longDate.indexOf(',');
@@ -345,11 +346,19 @@ export default function TodayScreen() {
                 <ThemedText style={styles.summaryClear}>Todo al día</ThemedText>
               </View>
             ) : null}
-            <View style={styles.xpRow}>
-              <Ionicons name="star" size={13} color={Colors.warning} />
-              <ThemedText style={styles.xpLabel}>
-                Nv {levelInfo(xp).level} · {xp} XP
-              </ThemedText>
+            <View style={styles.xpBlock}>
+              <View style={styles.xpRow}>
+                <Ionicons name="star" size={13} color={Colors.warning} />
+                <ThemedText style={styles.xpLabel}>
+                  Nv {info.level} · {xp} XP
+                </ThemedText>
+                <ThemedText style={styles.xpMissing}>
+                  faltan {info.remaining} XP
+                </ThemedText>
+              </View>
+              <View style={styles.xpBar}>
+                <View style={[styles.xpFill, { width: `${Math.round(info.progress * 100)}%` }]} />
+              </View>
             </View>
             {showQuick && (
               <Pressable style={styles.focusBtn} onPress={() => router.push('/focus')}>
@@ -450,19 +459,23 @@ const styles = StyleSheet.create({
   weekPillSel: { backgroundColor: Colors.tint },
   weekDow: { fontSize: 11, color: Colors.muted, fontWeight: '700' },
   weekDay: { fontSize: 15, fontWeight: '600', color: Colors.text },
-  summary: { paddingVertical: 10 },
+  summary: { paddingVertical: 24 },
   summaryMain: { flexDirection: 'row', alignItems: 'center', gap: 22 },
-  summaryInfo: { flex: 1, gap: 8 },
+  summaryInfo: { flex: 1, gap: 9, justifyContent: 'space-between', alignSelf: 'stretch' },
   summaryHero: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
   summaryDoneNum: { fontSize: 40, fontWeight: '800', color: Colors.text },
-  summaryTotal: { fontSize: 14, color: Colors.muted },
+  summaryTotal: { fontSize: 14, color: Colors.muted, flexShrink: 1 },
   ringPct: { fontSize: 30, fontWeight: '800', color: Colors.text },
   ringSub: { fontSize: 12, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
   summaryOverdueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryOverdue: { fontSize: 13, color: Colors.danger, flexShrink: 1 },
   summaryClear: { fontSize: 13, color: Colors.success },
-  xpRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  xpBlock: { gap: 6 },
+  xpRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
   xpLabel: { fontSize: 13, fontWeight: '800', color: Colors.warning },
+  xpMissing: { fontSize: 12, color: Colors.muted },
+  xpBar: { height: 7, borderRadius: 4, backgroundColor: Colors.border, overflow: 'hidden' },
+  xpFill: { height: 7, borderRadius: 4, backgroundColor: Colors.warning },
   focusBtn: {
     flexDirection: 'row',
     alignItems: 'center',

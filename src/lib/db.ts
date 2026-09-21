@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { XP_BY_PRIORITY } from './gamification';
+import { xpRewardFor } from './gamification';
 import { occursOnDate } from './logic';
 import { Priority, Recurrence, RemindType, Settings, Task, TaskCompletion, TaskStatus, XpEntry } from './schema';
 
@@ -302,6 +302,15 @@ export async function toggleTaskCompletion(
            WHERE id IN (${affected.map(() => '?').join(',')})`,
           [now, ...affected]
         );
+        // Reversa de XP: se devuelve lo ganado por cada tarea descompletada.
+        for (const tid of affected) {
+          const t = byId.get(tid);
+          if (!t) continue;
+          await db.runAsync(
+            'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
+            [-xpRewardFor(t), 'undo', tid, now]
+          );
+        }
       }
     } else {
       const ids = [id];
@@ -327,10 +336,9 @@ export async function toggleTaskCompletion(
       for (const tid of ids) {
         const t = byId.get(tid);
         if (!t) continue;
-        const xp = XP_BY_PRIORITY[t.priority] ?? XP_BY_PRIORITY.medium;
         await db.runAsync(
           'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
-          [xp, 'task', tid, now]
+          [xpRewardFor(t), 'task', tid, now]
         );
       }
 
@@ -362,6 +370,7 @@ export async function toggleTaskCompletion(
         if (kids.length === 0) break;
         const allDone = kids.every((c) => completedForDate.has(String(c.id)));
         if (!allDone || !occursOnDate(par, date)) break;
+        const newlyAdded = !completedForDate.has(String(par.id));
         await db.runAsync(
           'INSERT OR IGNORE INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
           [par.id, date, now]
@@ -370,6 +379,12 @@ export async function toggleTaskCompletion(
           "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?",
           [now, now, par.id]
         );
+        if (newlyAdded) {
+          await db.runAsync(
+            'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
+            [xpRewardFor(par), 'task', par.id, now]
+          );
+        }
         completedForDate.add(String(par.id));
         upId = par.parentId;
       }
@@ -404,7 +419,7 @@ export async function getCompletions(db: SQLiteDatabase): Promise<TaskCompletion
 
 export async function getXp(db: SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ xp: number }>(
-    'SELECT COALESCE(SUM(xp), 0) AS xp FROM xp_log'
+    'SELECT MAX(0, COALESCE(SUM(xp), 0)) AS xp FROM xp_log'
   );
   return row?.xp ?? 0;
 }

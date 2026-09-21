@@ -125,9 +125,9 @@ export default function HistoryScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <ThemedText style={styles.xpTitle}>Nivel {info.level}</ThemedText>
-                <ThemedText style={styles.xpSub}>
-                  {info.current} / {info.next} XP hacia el nivel {info.level + 1}
-                </ThemedText>
+<ThemedText style={styles.xpSub}>
+  {info.current} / {info.next} XP · faltan {info.remaining} para el nivel {info.level + 1}
+</ThemedText>
               </View>
               <ThemedText style={styles.xpTotal}>{xp} XP</ThemedText>
             </View>

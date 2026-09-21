@@ -13,7 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useToast } from '@/components/toast';
 import { Colors, PriorityAccent, Radius } from '@/constants/theme';
 import * as db from '@/lib/db';
-import { DAY_CLOSED_BONUS, XP_BY_PRIORITY } from '@/lib/gamification';
+import { DAY_CLOSED_BONUS, xpRewardFor } from '@/lib/gamification';
 import { formatTime, formatDateLong, statusForDate, todayISO } from '@/lib/logic';
 import { Task } from '@/lib/schema';
 
@@ -97,7 +97,7 @@ export default function FocusScreen() {
       await db.earnXp(sqlite, DAY_CLOSED_BONUS, 'day_close');
       toast.show(`¡Día completo! +${DAY_CLOSED_BONUS} XP`, 'success');
     } else {
-      toast.show(`+${XP_BY_PRIORITY[current.priority]} XP`, 'success');
+      toast.show(`+${xpRewardFor(current)} XP`, 'success');
     }
     setQueue((q) => q.filter((t) => t.id !== current.id));
   }

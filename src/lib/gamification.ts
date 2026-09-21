@@ -1,23 +1,32 @@
-import type { Priority } from '@/lib/db';
-
-/** XP ganada por completar una tarea según su prioridad. */
-export const XP_BY_PRIORITY: Record<Priority, number> = {
-  low: 5,
-  medium: 10,
-  high: 15,
-};
+import type { Task } from '@/lib/schema';
+import type { TaskType } from '@/lib/logic';
+import { taskTypeOf } from '@/lib/logic';
 
 /** Bonus al completar la última tarea pendiente del día. */
 export const DAY_CLOSED_BONUS = 25;
 
-/** XP que cuesta subir UNA unidad de nivel: 50, 75, 100, ... */
-function xpForLevel(level: number): number {
-  return 50 + (level - 1) * 25;
+/**
+ * XP ganada por completar una tarea según su tipo.
+ * Las generales dan con diferencia lo máximo: son proyectos que siempre están ahí.
+ */
+export const XP_BY_TYPE: Record<TaskType, number> = {
+  general: 100,
+  monthly: 50,
+  weekly: 40,
+  range: 30,
+  daily: 20,
+  once: 15,
+};
+
+/** XP que cuesta subir una unidad de nivel. Cada vez cuesta más: 60, 170, 312, 480, … */
+export function xpForLevel(level: number): number {
+  return Math.round(60 * Math.pow(level, 1.5));
 }
 
-function cumulativeXpFor(level: number): number {
+/** Total de XP necesario para ENTRAR en un nivel concreto (nivel 1 = 0). */
+function thresholdFor(level: number): number {
   let acc = 0;
-  for (let l = 1; l <= level; l++) acc += xpForLevel(l);
+  for (let l = 1; l < level; l++) acc += xpForLevel(l);
   return acc;
 }
 
@@ -26,16 +35,28 @@ export interface LevelInfo {
   current: number;
   next: number;
   progress: number;
+  remaining: number;
 }
 
 /** Nivel actual y progreso dentro de él a partir del total de XP. */
 export function levelInfo(xp: number): LevelInfo {
   let level = 1;
-  while (cumulativeXpFor(level + 1) <= xp) level++;
-  const prev = level === 1 ? 0 : cumulativeXpFor(level - 1);
+  while (xp >= thresholdFor(level + 1)) level++;
+  const prev = thresholdFor(level);
   const current = xp - prev;
-  const next = level === 1 ? cumulativeXpFor(1) : cumulativeXpFor(level) - prev;
-  return { level, current, next, progress: next === 0 ? 1 : Math.min(1, current / next) };
+  const next = level === 1 ? xpForLevel(1) : thresholdFor(level + 1) - prev;
+  return {
+    level,
+    current,
+    next,
+    progress: next === 0 ? 1 : Math.min(1, Math.max(0, current / next)),
+    remaining: Math.max(0, next - current),
+  };
+}
+
+/** Recompensa individual de una tarea según su tipo. */
+export function xpRewardFor(t: Pick<Task, 'recurrence' | 'startDate' | 'endDate'>): number {
+  return XP_BY_TYPE[taskTypeOf(t)] ?? XP_BY_TYPE.once;
 }
 
 export interface Achievements {
