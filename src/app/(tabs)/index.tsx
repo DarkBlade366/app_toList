@@ -17,7 +17,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Screen } from '@/components/ui/screen';
 import { Segmented } from '@/components/ui/segmented';
 import { SubtaskGroup } from '@/components/subtask-group';
-import { Colors, Shadow } from '@/constants/theme';
+import { Colors, Radius, Shadow } from '@/constants/theme';
 import * as db from '@/lib/db';
 import { DAY_CLOSED_BONUS, levelInfo } from '@/lib/gamification';
 import { Task } from '@/lib/schema';
@@ -320,8 +320,8 @@ export default function TodayScreen() {
         <View style={styles.summaryMain}>
           <ProgressRing
             progress={ratio}
-            size={140}
-            strokeWidth={12}
+            size={108}
+            strokeWidth={10}
             color={ratio >= 1 && shownTasks.length > 0 ? Colors.success : Colors.tint}>
             <ThemedText style={styles.ringPct}>{Math.round(ratio * 100)}%</ThemedText>
             <ThemedText style={styles.ringSub}>{isToday ? 'hoy' : 'ese día'}</ThemedText>
@@ -360,14 +360,14 @@ export default function TodayScreen() {
                 <View style={[styles.xpFill, { width: `${Math.round(info.progress * 100)}%` }]} />
               </View>
             </View>
-            {showQuick && (
-              <Pressable style={styles.focusBtn} onPress={() => router.push('/focus')}>
-                <Ionicons name="eye-outline" size={16} color={Colors.tint} />
-                <ThemedText style={styles.focusLabel}>Enfocar la primera pendiente</ThemedText>
-              </Pressable>
-            )}
           </View>
         </View>
+        {showQuick && (
+          <Pressable style={styles.focusFull} onPress={() => router.push('/focus')}>
+            <Ionicons name="eye-outline" size={18} color={Colors.tint} />
+            <ThemedText style={styles.focusLabel}>Enfocar la primera pendiente</ThemedText>
+          </Pressable>
+        )}
       </Card>
 
       <View style={styles.list}>
@@ -459,14 +459,14 @@ const styles = StyleSheet.create({
   weekPillSel: { backgroundColor: Colors.tint },
   weekDow: { fontSize: 11, color: Colors.muted, fontWeight: '700' },
   weekDay: { fontSize: 15, fontWeight: '600', color: Colors.text },
-  summary: { paddingVertical: 24 },
-  summaryMain: { flexDirection: 'row', alignItems: 'center', gap: 22 },
-  summaryInfo: { flex: 1, gap: 9, justifyContent: 'space-between', alignSelf: 'stretch' },
-  summaryHero: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
-  summaryDoneNum: { fontSize: 40, fontWeight: '800', color: Colors.text },
+  summary: { paddingVertical: 22 },
+  summaryMain: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  summaryInfo: { flex: 1, gap: 9 },
+  summaryHero: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  summaryDoneNum: { fontSize: 36, lineHeight: 40, fontWeight: '800', color: Colors.text },
   summaryTotal: { fontSize: 14, color: Colors.muted, flexShrink: 1 },
-  ringPct: { fontSize: 30, fontWeight: '800', color: Colors.text },
-  ringSub: { fontSize: 12, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  ringPct: { fontSize: 24, fontWeight: '800', color: Colors.text },
+  ringSub: { fontSize: 11, color: Colors.muted, textTransform: 'uppercase', letterSpacing: 0.6 },
   summaryOverdueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   summaryOverdue: { fontSize: 13, color: Colors.danger, flexShrink: 1 },
   summaryClear: { fontSize: 13, color: Colors.success },
@@ -476,20 +476,18 @@ const styles = StyleSheet.create({
   xpMissing: { fontSize: 12, color: Colors.muted },
   xpBar: { height: 7, borderRadius: 4, backgroundColor: Colors.border, overflow: 'hidden' },
   xpFill: { height: 7, borderRadius: 4, backgroundColor: Colors.warning },
-  focusBtn: {
+  focusFull: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 7,
-    alignSelf: 'flex-start',
+    gap: 8,
     borderWidth: 1,
     borderColor: 'rgba(34, 211, 238, 0.45)',
     backgroundColor: 'rgba(34, 211, 238, 0.1)',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderRadius: Radius.pill,
+    paddingVertical: 11,
   },
-  focusLabel: { fontSize: 13, fontWeight: '700', color: Colors.tint },
+  focusLabel: { fontSize: 14, fontWeight: '700', color: Colors.tint },
   fab: {
     position: 'absolute',
     right: 20,

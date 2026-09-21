@@ -30,6 +30,13 @@ export function DayCards({
   const [stack, setStack] = useState<number[]>([]);
   const [pageIndex, setPageIndex] = useState(0);
 
+  // Cartas casi a lo ancho del teléfono; el margen deja asomar un borde de la
+  // carta anterior (izquierda) o siguiente (derecha) para indicar el desplazamiento.
+  const PAD = 26;
+  const GAP = 12;
+  const CARD_W = width - PAD * 2;
+  const STEP = CARD_W + GAP;
+
   const childrenOf = useMemo(() => {
     const map = new Map<number, Task[]>();
     for (const t of tasks) {
@@ -48,9 +55,6 @@ export function DayCards({
     ? roots
     : (childrenOf.get(top) ?? []).filter((c) => occursOnDate(c, date));
   const titleOf = (id: number) => tasks.find((t) => t.id === id)?.title ?? '';
-
-  const cardWidth = width - 40;
-  const cardPad = cardWidth - 44;
 
   function drill(task: Task) {
     const kids = (childrenOf.get(task.id) ?? []).filter((c) => occursOnDate(c, date));
@@ -92,22 +96,20 @@ export function DayCards({
         key={`${stack.length}-${top ?? 'root'}-${cardKeys.map((k) => k.id).join(',')}`}
         keyExtractor={(t) => String(t.id)}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        snapToInterval={cardWidth + 16}
+        snapToInterval={STEP}
         decelerationRate="fast"
         contentContainerStyle={styles.carousel}
         onMomentumScrollEnd={(e) => {
-          const i = Math.round(e.nativeEvent.contentOffset.x / (cardWidth + 16));
+          const i = Math.round(e.nativeEvent.contentOffset.x / STEP);
           setPageIndex(Math.max(0, Math.min(i, cardKeys.length - 1)));
         }}
         renderItem={({ item }) => (
-          <View style={{ width: cardWidth }}>
+          <View style={{ width: CARD_W }}>
             <TaskCardView
               task={item}
               completed={completed}
               date={date}
-              width={cardPad}
               onToggle={() => onToggle(item)}
               kidsCount={(childrenOf.get(item.id) ?? []).filter((c) => occursOnDate(c, date)).length}
               onOpenCard={() => drill(item)}
@@ -116,7 +118,7 @@ export function DayCards({
           </View>
         )}
         ListEmptyComponent={
-          <View style={[styles.emptyWrap, { width: cardWidth }]}>
+          <View style={[styles.emptyWrap, { width: CARD_W }]}>
             <ThemedText style={styles.emptyText}>
               Sin sub-tareas para este día. Desliza para volver.
             </ThemedText>
@@ -139,7 +141,6 @@ function TaskCardView({
   task,
   completed,
   date,
-  width,
   onToggle,
   kidsCount,
   onOpenCard,
@@ -148,7 +149,6 @@ function TaskCardView({
   task: Task;
   completed: Set<string>;
   date: string;
-  width: number;
   onToggle: () => void;
   kidsCount: number;
   onOpenCard: () => void;
@@ -161,11 +161,7 @@ function TaskCardView({
 
   return (
     <Pressable
-      style={[
-        styles.card,
-        { width },
-        { borderColor: checked ? 'rgba(52, 211, 153, 0.6)' : accent },
-      ]}
+      style={[styles.card, { borderColor: checked ? 'rgba(52, 211, 153, 0.6)' : accent }]}
       onPress={onOpenCard}>
       <View style={styles.cardTop}>
         <View style={[styles.priorityBadge, { backgroundColor: accent }]}>
@@ -253,7 +249,7 @@ function TaskCardView({
 }
 
 const styles = StyleSheet.create({
-  carousel: { gap: 16 },
+  carousel: { gap: 12, paddingHorizontal: 26 },
   crumbRow: {
     flexDirection: 'row',
     alignItems: 'center',
