@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { xpRewardFor } from './gamification';
-import { occursOnDate } from './logic';
+import { DAY_CLOSED_BONUS, DAY_CLOSED_REASON, xpRewardFor } from './gamification';
+import { occursOnDate, todayISO } from './logic';
 import { Priority, Recurrence, RemindType, Settings, Task, TaskCompletion, TaskStatus, XpEntry } from './schema';
 
 export type {
@@ -486,6 +486,35 @@ export async function earnXp(
 export async function getXpLog(db: SQLiteDatabase): Promise<XpEntry[]> {
   return db.getAllAsync<XpEntry>(
     'SELECT id, xp, reason, task_id AS taskId, earned_at AS earnedAt FROM xp_log ORDER BY earned_at DESC'
+  );
+}
+
+/**
+ * Bonus de "día completo": solo se concede UNA vez por día (fecha local) y se
+ * revierte al desmarcar una tarea que vuelve a dejar el día incompleto. Así un
+ * ciclo marcar→desmarcar sale a cero en vez de sumar +25 sin parar.
+ */
+export async function grantDayClose(db: SQLiteDatabase): Promise<boolean> {
+  const row = await db.getFirstAsync<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM xp_log
+     WHERE reason = ? AND date(earned_at, 'localtime') = ?`,
+    DAY_CLOSED_REASON,
+    todayISO()
+  );
+  if ((row?.n ?? 0) > 0) return false;
+  await db.runAsync(
+    'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, NULL, ?)',
+    [DAY_CLOSED_BONUS, DAY_CLOSED_REASON, new Date().toISOString()]
+  );
+  return true;
+}
+
+export async function revokeDayClose(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync(
+    `DELETE FROM xp_log
+     WHERE reason = ? AND date(earned_at, 'localtime') = ?`,
+    DAY_CLOSED_REASON,
+    todayISO()
   );
 }
 

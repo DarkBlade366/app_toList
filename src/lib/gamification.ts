@@ -4,6 +4,8 @@ import { taskTypeOf } from '@/lib/logic';
 
 /** Bonus al completar la última tarea pendiente del día. */
 export const DAY_CLOSED_BONUS = 25;
+/** Razón usada en xp_log para el bonus de "día completo". */
+export const DAY_CLOSED_REASON = 'day_close';
 
 /**
  * XP ganada por completar una tarea según su tipo (tareas raíz).

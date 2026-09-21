@@ -41,8 +41,6 @@ import {
 
 type HoyTab = 'day' | 'general';
 
-const DAY_CLOSED_REASON = 'day_close';
-
 export default function TodayScreen() {
   const sqlite = useSQLiteContext();
   const router = useRouter();
@@ -153,8 +151,12 @@ export default function TodayScreen() {
       if (left === 0) {
         setBurst((b) => b + 1);
         if (isToday) {
-          await db.earnXp(sqlite, DAY_CLOSED_BONUS, DAY_CLOSED_REASON);
-          toast.show(`¡Día completo! +${DAY_CLOSED_BONUS} XP`, 'success');
+          const granted = await db.grantDayClose(sqlite);
+          if (granted) setXp((x) => x + DAY_CLOSED_BONUS);
+          toast.show(
+            granted ? `¡Día completo! +${DAY_CLOSED_BONUS} XP` : '¡Día completo!',
+            'success'
+          );
         } else {
           toast.show('¡Día completo!', 'success');
         }
@@ -162,6 +164,8 @@ export default function TodayScreen() {
         toast.show('Completada', 'success');
       }
     } else if (wasDone) {
+      if (isToday) await db.revokeDayClose(sqlite);
+      setXp(await db.getXp(sqlite));
       toast.show('Completado deshecho', 'info');
     }
   }
