@@ -240,6 +240,67 @@ export async function deleteTask(db: SQLiteDatabase, id: number) {
  *  - Desmarcar cualquier tarea desmarca toda su propia rama y también a todos sus
  *    ancestros (hasta la raíz), revirtiendo lo completado en bloque.
  */
+/**
+ * Revierte todos los completados de una fecha concreta (tarea + rama + ancestros),
+ * dejando en 'pending' lo que estaba 'completed' y devolviendo exactamente la XP
+ * que se ganó ese día (usa la cantidad guardada en el completado, no recalcula).
+ */
+async function removeCompletionsForDate(
+  db: SQLiteDatabase,
+  id: number,
+  subtree: number[],
+  all: Task[],
+  byId: Map<number, Task>,
+  date: string,
+  now: string
+) {
+  const task = byId.get(id);
+  if (!task) return;
+
+  const remove = [id, ...subtree];
+  const ancestors: number[] = [];
+  let cur = task.parentId;
+  while (cur != null) {
+    ancestors.push(cur);
+    cur = all.find((t) => t.id === cur)?.parentId ?? null;
+  }
+  const maybe = [...new Set([...remove, ...ancestors])];
+
+  const rows = await db.getAllAsync<{ task_id: number; xp: number | null }>(
+    `SELECT task_id, xp FROM task_completions
+     WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
+    [...maybe, date]
+  );
+  const affected = rows.map((r) => r.task_id);
+
+  await db.runAsync(
+    `DELETE FROM task_completions
+     WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
+    [...maybe, date]
+  );
+
+  if (affected.length > 0) {
+    await db.runAsync(
+      `UPDATE tasks
+       SET status = CASE WHEN status = 'completed' THEN 'pending' ELSE status END,
+           completed_at = NULL, updated_at = ?
+       WHERE id IN (${affected.map(() => '?').join(',')})`,
+      [now, ...affected]
+    );
+    // Reversa exacta de XP: por cada completado se devuelve exactamente la
+    // cantidad que se ganó ese día (no se recalcula).
+    for (const r of rows) {
+      const t = byId.get(r.task_id);
+      const gained = r.xp ?? (t ? xpRewardFor(t) : 0);
+      if (gained <= 0) continue;
+      await db.runAsync(
+        'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
+        [-gained, 'undo', r.task_id, now]
+      );
+    }
+  }
+}
+
 export async function toggleTaskCompletion(
   db: SQLiteDatabase,
   id: number,
@@ -247,12 +308,6 @@ export async function toggleTaskCompletion(
 ): Promise<boolean> {
   const task = await getTask(db, id);
   if (!task) return false;
-
-  const existing = await db.getFirstAsync<{ task_id: number }>(
-    'SELECT task_id FROM task_completions WHERE task_id = ? AND date = ?',
-    id,
-    date
-  );
 
   const now = new Date().toISOString();
   const all = await getTasks(db);
@@ -270,49 +325,30 @@ export async function toggleTaskCompletion(
     }
   }
 
+  const existing = await db.getFirstAsync<{ task_id: number }>(
+    'SELECT task_id FROM task_completions WHERE task_id = ? AND date = ?',
+    id,
+    date
+  );
+
+  // Si se desmarca algo que está 'completed' pero no tiene completado en ESTA
+  // fecha (p. ej. una general hecha ayer que hoy vuelve a salir como hecha en el
+  // listado), se revierten sus completados reales en vez de registrar uno nuevo.
+  // Antes ese caso caía en la rama de marcar y sumaba XP al desmarcar.
+  let undoTargets: string[] | null = existing ? [date] : null;
+  if (!existing && task.status === 'completed' && task.recurrence === 'none') {
+    const rows = await db.getAllAsync<{ date: string }>(
+      `SELECT DISTINCT date FROM task_completions
+       WHERE task_id IN (${[id, ...subtree].map(() => '?').join(',')})`,
+      [id, ...subtree]
+    );
+    if (rows.length > 0) undoTargets = rows.map((r) => r.date);
+  }
+
   await db.withTransactionAsync(async () => {
-    if (existing) {
-      const remove = [id, ...subtree];
-      const ancestors: number[] = [];
-      let cur = task.parentId;
-      while (cur != null) {
-        ancestors.push(cur);
-        cur = all.find((t) => t.id === cur)?.parentId ?? null;
-      }
-      const maybe = [...new Set([...remove, ...ancestors])];
-
-      const rows = await db.getAllAsync<{ task_id: number; xp: number | null }>(
-        `SELECT task_id, xp FROM task_completions
-         WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
-        [...maybe, date]
-      );
-      const affected = rows.map((r) => r.task_id);
-
-      await db.runAsync(
-        `DELETE FROM task_completions
-         WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
-        [...maybe, date]
-      );
-
-      if (affected.length > 0) {
-        await db.runAsync(
-          `UPDATE tasks
-           SET status = CASE WHEN status = 'completed' THEN 'pending' ELSE status END,
-               completed_at = NULL, updated_at = ?
-           WHERE id IN (${affected.map(() => '?').join(',')})`,
-          [now, ...affected]
-        );
-        // Reversa exacta de XP: por cada completado se devuelve exactamente la
-        // cantidad que se ganó ese día (no se recalcula).
-        for (const r of rows) {
-          const t = byId.get(r.task_id);
-          const gained = r.xp ?? (t ? xpRewardFor(t) : 0);
-          if (gained <= 0) continue;
-          await db.runAsync(
-            'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
-            [-gained, 'undo', r.task_id, now]
-          );
-        }
+    if (undoTargets) {
+      for (const d of undoTargets) {
+        await removeCompletionsForDate(db, id, subtree, all, byId, d, now);
       }
     } else {
       const ids = [id];
@@ -401,7 +437,8 @@ export async function toggleTaskCompletion(
     }
   });
 
-  return !existing;
+  // true si se marcó hecha; false si se desmarcó (o se revirtió un completado previo).
+  return !undoTargets;
 }
 
 export async function getCompletionsForDate(db: SQLiteDatabase, date: string): Promise<string[]> {
