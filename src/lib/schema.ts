@@ -62,7 +62,7 @@ const SETTING_DEFAULTS: Record<keyof Settings, string> = {
 };
 
 export async function migrateDbIfNeeded(db: SQLiteDatabase) {
-  const DATABASE_VERSION = 4;
+  const DATABASE_VERSION = 5;
   const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = versionRow?.user_version ?? 0;
 
@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS task_completions (
   id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
   task_id INTEGER NOT NULL,
   date TEXT NOT NULL,
+  xp INTEGER,
   created_at TEXT NOT NULL,
   UNIQUE (task_id, date),
   FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
@@ -204,6 +205,11 @@ CREATE TABLE IF NOT EXISTS xp_log (
 CREATE INDEX IF NOT EXISTS idx_xp_earned ON xp_log (earned_at);
 `);
     currentDbVersion = 4;
+  } else if (currentDbVersion === 4) {
+    await db.execAsync(`
+ALTER TABLE task_completions ADD COLUMN xp INTEGER;
+`);
+    currentDbVersion = 5;
   }
 
   await db.execAsync('PRAGMA foreign_keys = ON');

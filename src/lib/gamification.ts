@@ -6,17 +6,33 @@ import { taskTypeOf } from '@/lib/logic';
 export const DAY_CLOSED_BONUS = 25;
 
 /**
- * XP ganada por completar una tarea según su tipo.
- * Las generales dan con diferencia lo máximo: son proyectos que siempre están ahí.
+ * XP ganada por completar una tarea según su tipo (tareas raíz).
+ * El esfuerzo crece con la recurrencia: una general es un proyecto que siempre
+ * está ahí (la que más da) y un único día puntual lo que menos.
  */
 export const XP_BY_TYPE: Record<TaskType, number> = {
-  general: 100,
-  monthly: 50,
-  weekly: 40,
-  range: 30,
-  daily: 20,
-  once: 15,
+  general: 60,
+  monthly: 40,
+  weekly: 30,
+  range: 20,
+  daily: 15,
+  once: 10,
 };
+
+/** Fracción de XP que llevan las sub-tareas con respecto a su tarea raíz. */
+const SUBTASK_FACTOR = 0.5;
+
+/**
+ * Recompensa individual de una tarea según su tipo y jerarquía:
+ * las tareas raíz dan el valor completo y las sub-tareas la mitad.
+ */
+export function xpRewardFor(
+  t: Pick<Task, 'recurrence' | 'startDate' | 'endDate' | 'parentId'>
+): number {
+  const base = XP_BY_TYPE[taskTypeOf(t)] ?? XP_BY_TYPE.once;
+  if (t.parentId != null) return Math.max(1, Math.round(base * SUBTASK_FACTOR));
+  return base;
+}
 
 /** XP que cuesta subir una unidad de nivel. Cada vez cuesta más: 60, 170, 312, 480, … */
 export function xpForLevel(level: number): number {
@@ -52,11 +68,6 @@ export function levelInfo(xp: number): LevelInfo {
     progress: next === 0 ? 1 : Math.min(1, Math.max(0, current / next)),
     remaining: Math.max(0, next - current),
   };
-}
-
-/** Recompensa individual de una tarea según su tipo. */
-export function xpRewardFor(t: Pick<Task, 'recurrence' | 'startDate' | 'endDate'>): number {
-  return XP_BY_TYPE[taskTypeOf(t)] ?? XP_BY_TYPE.once;
 }
 
 export interface Achievements {

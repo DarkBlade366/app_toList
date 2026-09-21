@@ -281,8 +281,8 @@ export async function toggleTaskCompletion(
       }
       const maybe = [...new Set([...remove, ...ancestors])];
 
-      const rows = await db.getAllAsync<{ task_id: number }>(
-        `SELECT task_id FROM task_completions
+      const rows = await db.getAllAsync<{ task_id: number; xp: number | null }>(
+        `SELECT task_id, xp FROM task_completions
          WHERE task_id IN (${maybe.map(() => '?').join(',')}) AND date = ?`,
         [...maybe, date]
       );
@@ -302,13 +302,15 @@ export async function toggleTaskCompletion(
            WHERE id IN (${affected.map(() => '?').join(',')})`,
           [now, ...affected]
         );
-        // Reversa de XP: se devuelve lo ganado por cada tarea descompletada.
-        for (const tid of affected) {
-          const t = byId.get(tid);
-          if (!t) continue;
+        // Reversa exacta de XP: por cada completado se devuelve exactamente la
+        // cantidad que se ganó ese día (no se recalcula).
+        for (const r of rows) {
+          const t = byId.get(r.task_id);
+          const gained = r.xp ?? (t ? xpRewardFor(t) : 0);
+          if (gained <= 0) continue;
           await db.runAsync(
             'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
-            [-xpRewardFor(t), 'undo', tid, now]
+            [-gained, 'undo', r.task_id, now]
           );
         }
       }
@@ -320,27 +322,6 @@ export async function toggleTaskCompletion(
         if (child.status === 'cancelled' || child.status === 'paused') continue;
         ids.push(tid);
       }
-      for (const tid of ids) {
-        await db.runAsync(
-          'INSERT OR IGNORE INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
-          [tid, date, now]
-        );
-      }
-      await db.runAsync(
-        `UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ?
-         WHERE id IN (${ids.map(() => '?').join(',')})`,
-        [now, now, ...ids]
-      );
-
-      // Orquesta XP por cada tarea completada este día.
-      for (const tid of ids) {
-        const t = byId.get(tid);
-        if (!t) continue;
-        await db.runAsync(
-          'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
-          [xpRewardFor(t), 'task', tid, now]
-        );
-      }
 
       const completedForDate = new Set(
         (
@@ -350,6 +331,34 @@ export async function toggleTaskCompletion(
           )
         ).map((r) => String(r.taskId))
       );
+
+      // Guarda también cuánto vale la tarea ese día para poder revertirlo igual.
+      for (const tid of ids) {
+        const t = byId.get(tid);
+        if (!t) continue;
+        await db.runAsync(
+          'INSERT OR IGNORE INTO task_completions (task_id, date, created_at, xp) VALUES (?, ?, ?, ?)',
+          [tid, date, now, xpRewardFor(t)]
+        );
+      }
+      await db.runAsync(
+        `UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ?
+         WHERE id IN (${ids.map(() => '?').join(',')})`,
+        [now, now, ...ids]
+      );
+
+      // XP solo para las que hoy aún no estaban hechas (evita doble recompensa).
+      for (const tid of ids) {
+        if (completedForDate.has(String(tid))) continue;
+        const t = byId.get(tid);
+        if (!t) continue;
+        const gained = xpRewardFor(t);
+        completedForDate.add(String(tid));
+        await db.runAsync(
+          'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
+          [gained, 'task', tid, now]
+        );
+      }
 
       // Propaga hacia arriba: si con este completado TODOS los hijos que ocurren
       // ese día quedan hechos, el padre también se completa (y así en cadena).
@@ -371,9 +380,10 @@ export async function toggleTaskCompletion(
         const allDone = kids.every((c) => completedForDate.has(String(c.id)));
         if (!allDone || !occursOnDate(par, date)) break;
         const newlyAdded = !completedForDate.has(String(par.id));
+        const gained = xpRewardFor(par);
         await db.runAsync(
-          'INSERT OR IGNORE INTO task_completions (task_id, date, created_at) VALUES (?, ?, ?)',
-          [par.id, date, now]
+          'INSERT OR IGNORE INTO task_completions (task_id, date, created_at, xp) VALUES (?, ?, ?, ?)',
+          [par.id, date, now, gained]
         );
         await db.runAsync(
           "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?",
@@ -382,7 +392,7 @@ export async function toggleTaskCompletion(
         if (newlyAdded) {
           await db.runAsync(
             'INSERT INTO xp_log (xp, reason, task_id, earned_at) VALUES (?, ?, ?, ?)',
-            [xpRewardFor(par), 'task', par.id, now]
+            [gained, 'task', par.id, now]
           );
         }
         completedForDate.add(String(par.id));
