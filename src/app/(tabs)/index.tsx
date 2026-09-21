@@ -374,9 +374,9 @@ export default function TodayScreen() {
         )}
       </Card>
 
-      <View style={styles.list}>
-        {tab === 'day' ? (
-          dayTasks.length === 0 ? (
+      {tab === 'day' ? (
+        dayTasks.length === 0 ? (
+          <View style={styles.list}>
             <Card>
               <EmptyState
                 icon="sunny-outline"
@@ -388,16 +388,26 @@ export default function TodayScreen() {
                 }
               />
             </Card>
-          ) : (
+          </View>
+        ) : (
+          <View style={styles.bleed}>
             <DayCards
               tasks={dayTasks}
               completed={completed}
               date={date}
               onToggle={toggle}
-              onOpen={(id) => router.push(`/task/${id}`)}
+              onOpen={(id) =>
+                router.push({
+                  pathname: '/task-group/[id]',
+                  params: { id: String(id), date },
+                })
+              }
+              onDetails={(id) => router.push(`/task/${id}`)}
             />
-          )
-        ) : shownTasks.length === 0 ? (
+          </View>
+        )
+      ) : shownTasks.length === 0 ? (
+        <View style={styles.list}>
           <Card>
             <EmptyState
               icon="layers-outline"
@@ -407,10 +417,10 @@ export default function TodayScreen() {
               onAction={() => router.push({ pathname: '/task/new' })}
             />
           </Card>
-        ) : (
-          tree.map((t) => renderNode(t))
-        )}
-      </View>
+        </View>
+      ) : (
+        <View style={styles.list}>{tree.map((t) => renderNode(t))}</View>
+      )}
 
       {showQuick && (
         <Pressable
@@ -512,4 +522,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     overflow: 'hidden',
   },
+  bleed: { marginHorizontal: -20 },
 });

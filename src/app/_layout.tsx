@@ -17,6 +17,7 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="task/new" options={{ presentation: 'modal', headerShown: false }} />
             <Stack.Screen name="task/[id]" options={{ presentation: 'modal', headerShown: false }} />
+            <Stack.Screen name="task-group/[id]" options={{ headerShown: false }} />
             <Stack.Screen name="focus" options={{ presentation: 'modal', headerShown: false }} />
             <Stack.Screen name="task-type/[type]" options={{ headerShown: false }} />
             <Stack.Screen name="task-filter" options={{ headerShown: false }} />
