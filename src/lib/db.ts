@@ -129,7 +129,7 @@ export async function addTask(db: SQLiteDatabase, data: TaskWrite): Promise<numb
     `INSERT INTO tasks (title, notes, parent_id, sort_order, recurrence, recurrence_days,
                         monthly_day, start_date, end_date, start_time, end_time, priority, status,
                         remind_type, remind_before_minutes, remind_at_start, created_at, updated_at)
-     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tasks), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM tasks), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.title,
       data.notes,

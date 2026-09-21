@@ -79,11 +79,19 @@ export default function NewTaskModal() {
         initialStep={presetType ? 1 : 0}
         defaults={defaults ?? undefined}
         onSubmit={async (data) => {
-          await db.addTask(sqlite, { ...data, parentId: parentCtx?.id ?? data.parentId ?? null });
-          void syncNotifications(sqlite);
-          toast.show('Tarea añadida', 'success');
-          router.back();
-          return true;
+          try {
+            await db.addTask(sqlite, {
+              ...data,
+              parentId: parentCtx?.id ?? data.parentId ?? null,
+            });
+            void syncNotifications(sqlite);
+            toast.show('Tarea añadida', 'success');
+            router.back();
+            return true;
+          } catch (e) {
+            toast.show((e as Error).message ?? 'No se pudo guardar', 'error');
+            return false;
+          }
         }}
       />
     </View>

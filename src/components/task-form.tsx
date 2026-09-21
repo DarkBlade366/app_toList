@@ -300,7 +300,7 @@ export function TaskForm({
 
         {step === 2 && (
           <View style={styles.step}>
-            <StepTitle title="Detalles" subtitle="Casi listo." allowBack={step > 0} onBack={() => setStep(1)} />
+            <StepTitle title="Detalles" subtitle="Casi listo." />
             <TextField
               label="Título"
               placeholder={form.type === 'general' ? 'Ej.: Estudiar la certificación' : '¿Qué tienes que hacer?'}
@@ -355,13 +355,9 @@ export function TaskForm({
 function StepTitle({
   title,
   subtitle,
-  allowBack,
-  onBack,
 }: {
   title: string;
   subtitle?: string;
-  allowBack?: boolean;
-  onBack?: () => void;
 }) {
   return (
     <View style={styles.stepHead}>
@@ -399,7 +395,7 @@ function ScheduleStep({
 
   return (
     <View style={styles.step}>
-      <StepTitle title="Cuándo" subtitle="Define las fechas y el margen de tiempo." allowBack />
+      <StepTitle title="Cuándo" subtitle="Define las fechas y el margen de tiempo." />
 
       {parent ? (
         <View style={styles.rangeBox}>
